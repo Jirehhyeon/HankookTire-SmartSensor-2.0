@@ -26,8 +26,8 @@ from email.mime.multipart import MimeMultipart
 # 설정
 POSTGRES_HOST = os.getenv('POSTGRES_HOST', 'postgres-service')
 POSTGRES_PORT = int(os.getenv('POSTGRES_PORT', '5432'))
-POSTGRES_DB = os.getenv('POSTGRES_DB', 'hankook_sensors')
-POSTGRES_USER = os.getenv('POSTGRES_USER', 'hankook')
+POSTGRES_DB = os.getenv('POSTGRES_DB', 'smarttire_sensors')
+POSTGRES_USER = os.getenv('POSTGRES_USER', 'smarttire')
 POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD', 'password')
 
 REDIS_HOST = os.getenv('REDIS_HOST', 'redis-service')
@@ -43,7 +43,7 @@ EMAIL_SMTP_SERVER = os.getenv('EMAIL_SMTP_SERVER', 'smtp.gmail.com')
 EMAIL_SMTP_PORT = int(os.getenv('EMAIL_SMTP_PORT', '587'))
 EMAIL_USERNAME = os.getenv('EMAIL_USERNAME', '')
 EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD', '')
-ALERT_EMAIL_TO = os.getenv('ALERT_EMAIL_TO', 'ops@hankook-smartsensor.com')
+ALERT_EMAIL_TO = os.getenv('ALERT_EMAIL_TO', 'ops@smarttire-smartsensor.com')
 
 # 로깅 설정
 logging.basicConfig(

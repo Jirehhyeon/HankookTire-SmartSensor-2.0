@@ -103,7 +103,7 @@ spec:
       serviceAccountName: hankook-service-account
       containers:
       - name: frontend
-        image: hankook/smartsensor-frontend:2.0.0
+        image: smarttire/smartsensor-frontend:2.0.0
         ports:
         - containerPort: 80
           name: http

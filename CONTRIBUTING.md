@@ -1,11 +1,11 @@
 # 기여 가이드
 
-**HankookTire SmartSensor 2.0** 프로젝트에 기여해 주셔서 감사합니다! 
+**SmartTire Sensor 2.0** 프로젝트에 기여해 주셔서 감사합니다! 
 
 ## 🤝 기여 방법
 
 ### 1. 이슈 제기
-- 버그 발견 시 [Issues](https://github.com/hankooktire/smartsensor-2.0/issues)에 등록
+- 버그 발견 시 [Issues](https://github.com/Jirehhyeon/SmartTire-SmartSensor-2.0/issues)에 등록
 - 새로운 기능 제안
 - 문서 개선 사항
 
@@ -46,8 +46,8 @@ Breaking Change: 중대한 변경사항 (옵션)
 - `npm test` 또는 `pytest` 실행
 
 ## 📧 연락처
-- **메인테이너**: smartsensor-team@hankook.com
-- **커뮤니티**: https://forum.hankook-smartsensor.com
+- **메인테이너**: smartsensor-team@smarttire.com
+- **커뮤니티**: https://forum.smarttire-sensor.com
 
 ## 📄 라이선스
 이 프로젝트에 기여함으로써 [MIT 라이선스](LICENSE)에 동의합니다.

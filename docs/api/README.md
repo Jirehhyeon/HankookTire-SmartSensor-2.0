@@ -1,8 +1,8 @@
 # 📡 API 문서
 
-**HankookTire SmartSensor 2.0 REST API & GraphQL 가이드**
+**SmartTire SmartSensor 2.0 REST API & GraphQL 가이드**
 
-이 문서는 HankookTire SmartSensor 2.0 시스템의 API 사용법을 상세히 안내합니다.
+이 문서는 SmartTire SmartSensor 2.0 시스템의 API 사용법을 상세히 안내합니다.
 
 ---
 
@@ -789,7 +789,7 @@ QoS Levels: 0, 1, 2 지원
 
 ### 토픽 구조
 ```
-hankook/smartsensor/
+smarttire/smartsensor/
 ├── devices/
 │   └── {device_id}/
 │       ├── data              # 센서 데이터 발행
@@ -830,7 +830,7 @@ const sensorData = {
 };
 
 client.publish(
-  'hankook/smartsensor/devices/sensor_device_001/data',
+  'smarttire/smartsensor/devices/sensor_device_001/data',
   JSON.stringify(sensorData),
   { qos: 1, retain: false }
 );
@@ -845,10 +845,10 @@ const client = mqtt.connect('mqtts://mqtt.hankook-smartsensor.com:8883', {
 });
 
 // 특정 차량 알림 구독
-client.subscribe('hankook/smartsensor/vehicles/HK-2024-001/alerts', { qos: 1 });
+client.subscribe('smarttire/smartsensor/vehicles/HK-2024-001/alerts', { qos: 1 });
 
 // 시스템 공지 구독
-client.subscribe('hankook/smartsensor/system/announcements', { qos: 0 });
+client.subscribe('smarttire/smartsensor/system/announcements', { qos: 0 });
 
 client.on('message', (topic, message) => {
   const data = JSON.parse(message.toString());
@@ -867,12 +867,12 @@ client.on('message', (topic, message) => {
 
 #### 설치
 ```bash
-npm install @hankook/smartsensor-sdk
+npm install @smarttire/smartsensor-sdk
 ```
 
 #### 사용 예제
 ```typescript
-import { SmartSensorAPI } from '@hankook/smartsensor-sdk';
+import { SmartSensorAPI } from '@smarttire/smartsensor-sdk';
 
 const api = new SmartSensorAPI({
   baseURL: 'https://api.hankook-smartsensor.com',
@@ -973,12 +973,12 @@ System.out.println("최근 압력: " + sensorData.getLatestValue() + " PSI");
 
 #### 설치 (NuGet)
 ```bash
-Install-Package HankookTire.SmartSensor.SDK
+Install-Package SmartTire.SmartSensor.SDK
 ```
 
 #### 사용 예제
 ```csharp
-using HankookTire.SmartSensor;
+using SmartTire.SmartSensor;
 
 var client = new SmartSensorClient(new SmartSensorConfig
 {
@@ -1187,4 +1187,4 @@ const vehicle = await apiCallWithRetry(() =>
 
 **🚀 API를 활용하여 혁신적인 스마트 타이어 솔루션을 구축하세요!**
 
-© 2024 HankookTire SmartSensor 2.0. All rights reserved.
+© 2024 SmartTire SmartSensor 2.0. All rights reserved.

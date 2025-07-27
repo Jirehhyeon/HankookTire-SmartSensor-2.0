@@ -1,8 +1,8 @@
 # 🔧 문제 해결 가이드
 
-**HankookTire SmartSensor 2.0 시스템 문제 해결**
+**SmartTire SmartSensor 2.0 시스템 문제 해결**
 
-이 가이드는 HankookTire SmartSensor 2.0 시스템에서 발생할 수 있는 일반적인 문제들의 해결 방법을 제공합니다.
+이 가이드는 SmartTire SmartSensor 2.0 시스템에서 발생할 수 있는 일반적인 문제들의 해결 방법을 제공합니다.
 
 ---
 
@@ -163,7 +163,7 @@ kubectl exec -n hankook-smartsensor postgresql-cluster-0 -- \
 
 # 4. MQTT 연결 테스트
 kubectl run mqtt-test --rm -i --restart=Never --image=eclipse-mosquitto:2.0 -- \
-  mosquitto_sub -h mqtt-broker.hankook-smartsensor.svc.cluster.local -t "hankook/smartsensor/+/+/data" -v
+  mosquitto_sub -h mqtt-broker.hankook-smartsensor.svc.cluster.local -t "smarttire/smartsensor/+/+/data" -v
 ```
 
 #### 해결 방법
@@ -875,7 +875,7 @@ kubectl patch secret alertmanager-config -n monitoring -p '
 #!/bin/bash
 # 시스템 종합 진단 스크립트
 
-echo "🔍 HankookTire SmartSensor 2.0 시스템 진단 시작"
+echo "🔍 SmartTire SmartSensor 2.0 시스템 진단 시작"
 echo "================================================="
 
 # 1. 클러스터 기본 상태
@@ -1174,4 +1174,4 @@ echo "✅ 성능 프로파일링 완료"
 
 **🛠️ 문제를 신속하게 해결하여 시스템을 안정적으로 유지하세요!**
 
-© 2024 HankookTire SmartSensor 2.0. All rights reserved.
+© 2024 SmartTire SmartSensor 2.0. All rights reserved.

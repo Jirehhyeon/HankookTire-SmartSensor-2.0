@@ -50,9 +50,9 @@ namePrefix: hankook-
 
 # 이미지 설정
 images:
-  - name: hankook/smartsensor-api
+  - name: smarttire/smartsensor-api
     newTag: "2.0.0"
-  - name: hankook/smartsensor-frontend
+  - name: smarttire/smartsensor-frontend
     newTag: "2.0.0"
 
 # ConfigMap 생성기

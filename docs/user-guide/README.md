@@ -1,8 +1,8 @@
 # 📖 사용자 가이드
 
-**HankookTire SmartSensor 2.0 사용자 매뉴얼**
+**SmartTire SmartSensor 2.0 사용자 매뉴얼**
 
-이 가이드는 HankookTire SmartSensor 2.0 시스템을 효율적으로 사용하는 방법을 안내합니다.
+이 가이드는 SmartTire SmartSensor 2.0 시스템을 효율적으로 사용하는 방법을 안내합니다.
 
 ---
 
@@ -354,7 +354,7 @@ LIMIT 10;
 ### 앱 다운로드
 - **Android**: Google Play Store
 - **iOS**: Apple App Store
-- **앱 이름**: "HankookTire SmartSensor"
+- **앱 이름**: "SmartTire SmartSensor"
 
 ### 주요 기능
 
@@ -501,4 +501,4 @@ https://hankook-smartsensor.com/dashboard?vehicle=HK-2024-001&time=24h&refresh=6
 
 **📧 문의사항이 있으시면 언제든지 연락주세요!**
 
-© 2024 HankookTire SmartSensor 2.0. All rights reserved.
+© 2024 SmartTire SmartSensor 2.0. All rights reserved.

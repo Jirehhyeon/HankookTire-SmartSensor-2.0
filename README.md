@@ -1,8 +1,8 @@
-# 🚀 HankookTire SmartSensor 2.0
+# 🚀 SmartTire Sensor 2.0
 ## 차세대 통합 스마트 타이어 센서 시스템
 
 ### 🌟 개요
-한국타이어의 모든 센서 시스템을 통합한 차세대 AI 기반 스마트 팩토리 솔루션입니다.
+모든 타이어 센서 시스템을 통합한 차세대 AI 기반 스마트 팩토리 솔루션입니다.
 기존의 분산된 시스템들을 하나로 통합하고, AI/ML 기술을 대폭 강화했습니다.
 
 ### 🎯 핵심 기능
@@ -66,7 +66,7 @@
 ### 📁 프로젝트 구조
 
 ```
-HankookTire-SmartSensor-2.0/
+SmartTire-Sensor-2.0/
 ├── backend/                    # 백엔드 API 서버
 │   ├── app/
 │   │   ├── ai/                # AI 엔진
@@ -111,8 +111,8 @@ HankookTire-SmartSensor-2.0/
 
 #### 1. 개발 환경 설정
 ```bash
-git clone https://github.com/hankook/smartsensor-2.0
-cd HankookTire-SmartSensor-2.0
+git clone https://github.com/Jirehhyeon/SmartTire-SmartSensor-2.0
+cd SmartTire-Sensor-2.0
 ```
 
 #### 2. Docker Compose로 전체 시스템 실행
@@ -193,7 +193,7 @@ class SensorDataWidget extends StatelessWidget {
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: hankook-smartsensor
+  name: smarttire-sensor
 spec:
   replicas: 3
   selector:
@@ -203,7 +203,7 @@ spec:
     spec:
       containers:
       - name: api
-        image: hankook/smartsensor-api:latest
+        image: smarttire/sensor-api:latest
         ports:
         - containerPort: 8000
 ```
@@ -230,9 +230,9 @@ spec:
 
 ### 📞 지원
 
-- **이메일**: support@hankook-smartsensor.com
-- **문서**: https://docs.hankook-smartsensor.com
-- **GitHub**: https://github.com/hankook/smartsensor-2.0
+- **이메일**: support@smarttire-sensor.com
+- **문서**: https://docs.smarttire-sensor.com
+- **GitHub**: https://github.com/Jirehhyeon/SmartTire-SmartSensor-2.0
 - **Slack**: #smartsensor-support
 
 ### 📄 라이선스
@@ -241,4 +241,4 @@ MIT License - 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
 
 ---
 
-> 🚀 **한국타이어와 함께하는 스마트 팩토리의 미래**
+> 🚀 **스마트 타이어 센서 시스템으로 만드는 미래 모빌리티**

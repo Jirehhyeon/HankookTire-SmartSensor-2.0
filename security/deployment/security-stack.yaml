@@ -46,7 +46,7 @@ spec:
         fsGroup: 2000
       containers:
       - name: oauth2-server
-        image: hankook/oauth2-server:v2.0.0
+        image: smarttire/oauth2-server:v2.0.0
         imagePullPolicy: Always
         ports:
         - name: http
@@ -174,7 +174,7 @@ spec:
         fsGroup: 2000
       containers:
       - name: network-security-manager
-        image: hankook/network-security-manager:v2.0.0
+        image: smarttire/network-security-manager:v2.0.0
         imagePullPolicy: Always
         ports:
         - name: http
@@ -297,7 +297,7 @@ spec:
         fsGroup: 2000
       containers:
       - name: crypto-manager
-        image: hankook/crypto-manager:v2.0.0
+        image: smarttire/crypto-manager:v2.0.0
         imagePullPolicy: Always
         ports:
         - name: http

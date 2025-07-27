@@ -31,8 +31,8 @@ import os
 # 설정
 POSTGRES_HOST = os.getenv('POSTGRES_HOST', 'localhost')
 POSTGRES_PORT = int(os.getenv('POSTGRES_PORT', '5432'))
-POSTGRES_DB = os.getenv('POSTGRES_DB', 'hankook_sensors')
-POSTGRES_USER = os.getenv('POSTGRES_USER', 'hankook')
+POSTGRES_DB = os.getenv('POSTGRES_DB', 'smarttire_sensors')
+POSTGRES_USER = os.getenv('POSTGRES_USER', 'smarttire')
 POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD', 'password')
 
 REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')

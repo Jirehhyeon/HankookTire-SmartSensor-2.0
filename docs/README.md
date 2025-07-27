@@ -1,4 +1,4 @@
-# 🚗 HankookTire SmartSensor 2.0
+# 🚗 SmartTire Sensor 2.0
 
 **차세대 통합 스마트 타이어 센서 시스템**
 
@@ -8,7 +8,7 @@
 
 ## 🌟 시스템 개요
 
-HankookTire SmartSensor 2.0은 기존의 로딩/스태킹 프로젝트, 타이어 압력 모니터링 시스템, 실시간 데이터 수집 프로젝트를 통합하여 개발된 차세대 스마트 타이어 센서 플랫폼입니다.
+SmartTire Sensor 2.0은 기존의 로딩/스태킹 프로젝트, 타이어 압력 모니터링 시스템, 실시간 데이터 수집 프로젝트를 통합하여 개발된 차세대 스마트 타이어 센서 플랫폼입니다.
 
 ### 핵심 기능
 
@@ -59,12 +59,12 @@ HankookTire SmartSensor 2.0은 기존의 로딩/스태킹 프로젝트, 타이�
 
 ```bash
 # 1. 저장소 클론
-git clone https://github.com/hankooktire/smartsensor-2.0.git
-cd smartsensor-2.0
+git clone https://github.com/Jirehhyeon/SmartTire-SmartSensor-2.0.git
+cd SmartTire-SmartSensor-2.0
 
 # 2. 환경 설정
-export NAMESPACE="hankook-smartsensor"
-export SECURITY_NAMESPACE="hankook-security"
+export NAMESPACE="smarttire-sensor"
+export SECURITY_NAMESPACE="smarttire-security"
 export MONITORING_NAMESPACE="monitoring"
 
 # 3. 기본 인프라 배포
@@ -90,7 +90,7 @@ cd ../../performance/scripts
 #### 웹 대시보드
 ```bash
 # 포트포워딩
-kubectl port-forward -n hankook-smartsensor svc/web-dashboard 3000:80
+kubectl port-forward -n smarttire-sensor svc/web-dashboard 3000:80
 
 # 브라우저에서 접속
 http://localhost:3000
@@ -99,7 +99,7 @@ http://localhost:3000
 #### API 서버
 ```bash
 # 포트포워딩
-kubectl port-forward -n hankook-smartsensor svc/api-server 8000:8000
+kubectl port-forward -n smarttire-sensor svc/api-server 8000:8000
 
 # API 테스트
 curl http://localhost:8000/api/health
@@ -262,18 +262,18 @@ pytest tests/
 ## 📞 지원 및 연락처
 
 ### 기술 지원
-- **이메일**: support@hankook-smartsensor.com
-- **문서**: https://docs.hankook-smartsensor.com
-- **이슈 트래커**: https://github.com/hankooktire/smartsensor-2.0/issues
+- **이메일**: support@smarttire-sensor.com
+- **문서**: https://docs.smarttire-sensor.com
+- **이슈 트래커**: https://github.com/Jirehhyeon/SmartTire-SmartSensor-2.0/issues
 
 ### 팀 연락처
-- **DevOps 팀**: devops@hankook-smartsensor.com
-- **보안 팀**: security@hankook-smartsensor.com
-- **제품 팀**: product@hankook-smartsensor.com
+- **DevOps 팀**: devops@smarttire-sensor.com
+- **보안 팀**: security@smarttire-sensor.com
+- **제품 팀**: product@smarttire-sensor.com
 
 ## 📋 라이선스
 
-이 프로젝트는 HankookTire의 독점 소프트웨어입니다. 
+이 프로젝트는 MIT 라이선스 하에 제공되는 오픈소스 소프트웨어입니다. 
 자세한 내용은 [LICENSE](./LICENSE) 파일을 참조하세요.
 
 ## 🔄 업데이트 로그
@@ -287,4 +287,4 @@ pytest tests/
 
 ---
 
-**© 2024 HankookTire SmartSensor 2.0. All rights reserved.**
+**© 2024 SmartTire Sensor 2.0. MIT License.**

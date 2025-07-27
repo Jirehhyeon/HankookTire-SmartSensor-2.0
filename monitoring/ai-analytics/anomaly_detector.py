@@ -48,8 +48,8 @@ from scipy.signal import savgol_filter
 DATABASE_CONFIG = {
     'host': os.getenv('POSTGRES_HOST', 'postgres-service'),
     'port': int(os.getenv('POSTGRES_PORT', '5432')),
-    'database': os.getenv('POSTGRES_DB', 'hankook_sensors'),
-    'user': os.getenv('POSTGRES_USER', 'hankook'),
+    'database': os.getenv('POSTGRES_DB', 'smarttire_sensors'),
+    'user': os.getenv('POSTGRES_USER', 'smarttire'),
     'password': os.getenv('POSTGRES_PASSWORD', 'password')
 }
 

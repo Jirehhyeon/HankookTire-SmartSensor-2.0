@@ -231,7 +231,7 @@ data:
     # bridge_cafile /mosquitto/certs/cloud-ca.crt
     # remote_username hankook-bridge
     # remote_password bridge-password
-    # topic hankook/# out 0
+    # topic smarttire/# out 0
     # bridge_insecure false
   
   passwd: |

@@ -1,8 +1,8 @@
 # 🛠️ 설치 가이드
 
-**HankookTire SmartSensor 2.0 시스템 설치 및 구성**
+**SmartTire SmartSensor 2.0 시스템 설치 및 구성**
 
-이 가이드는 HankookTire SmartSensor 2.0 시스템의 완전한 설치 및 구성 과정을 안내합니다.
+이 가이드는 SmartTire SmartSensor 2.0 시스템의 완전한 설치 및 구성 과정을 안내합니다.
 
 ---
 
@@ -1019,11 +1019,11 @@ kubectl describe serviceaccount <service-account> -n <namespace>
 
 ### 교육 및 인증
 - **관리자 교육**: 설치 후 필수 교육 과정
-- **인증 프로그램**: HankookTire SmartSensor 전문가 인증
+- **인증 프로그램**: SmartTire SmartSensor 전문가 인증
 - **워크샵**: 정기 기술 워크샵 및 업데이트 세미나
 
 ---
 
 **🎉 설치 완료 후 시스템이 정상적으로 작동하는지 확인하고, 추가 구성이나 문제가 있으면 언제든지 연락주세요!**
 
-© 2024 HankookTire SmartSensor 2.0. All rights reserved.
+© 2024 SmartTire SmartSensor 2.0. All rights reserved.

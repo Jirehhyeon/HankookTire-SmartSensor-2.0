@@ -1,4 +1,4 @@
-# 🚀 HankookTire SmartSensor 2.0 - Kubernetes 배포 가이드
+# 🚀 SmartTire SmartSensor 2.0 - Kubernetes 배포 가이드
 
 ## 📋 목차
 1. [사전 요구사항](#사전-요구사항)
@@ -243,7 +243,7 @@ psql -h localhost -p 5432 -U hankook -d hankook_sensors -c "SELECT version();"
 kubectl port-forward -n hankook-smartsensor svc/mosquitto-service 1883:1883
 
 # MQTT 클라이언트로 테스트
-mosquitto_pub -h localhost -p 1883 -t test/topic -m "Hello HankookTire!"
+mosquitto_pub -h localhost -p 1883 -t test/topic -m "Hello SmartTire!"
 mosquitto_sub -h localhost -p 1883 -t test/topic
 ```
 

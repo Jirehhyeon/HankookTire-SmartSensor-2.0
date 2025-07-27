@@ -1,8 +1,8 @@
 # 🔧 운영 가이드
 
-**HankookTire SmartSensor 2.0 시스템 운영 및 관리**
+**SmartTire SmartSensor 2.0 시스템 운영 및 관리**
 
-이 가이드는 HankookTire SmartSensor 2.0 시스템의 일상적인 운영, 관리, 유지보수 방법을 안내합니다.
+이 가이드는 SmartTire SmartSensor 2.0 시스템의 일상적인 운영, 관리, 유지보수 방법을 안내합니다.
 
 ---
 
@@ -253,7 +253,7 @@ kubectl get clusterrolebindings -o wide | grep -v system:
 # 3. 보안 스캔
 echo "🔍 보안 취약점 스캔:"
 # Trivy를 사용한 이미지 스캔
-trivy image --severity HIGH,CRITICAL hankook/api-server:latest
+trivy image --severity HIGH,CRITICAL smarttire/api-server:latest
 
 # 4. 네트워크 정책 확인
 echo "🌐 네트워크 정책 상태:"
@@ -353,7 +353,7 @@ groups:
 ```json
 {
   "dashboard": {
-    "title": "HankookTire SmartSensor 2.0 - System Overview",
+    "title": "SmartTire SmartSensor 2.0 - System Overview",
     "panels": [
       {
         "title": "API 요청률",
@@ -950,10 +950,10 @@ echo "🔍 정기 보안 스캔 시작: $(date)"
 
 # 1. 컨테이너 이미지 취약점 스캔
 IMAGES=(
-  "hankook/api-server:latest"
-  "hankook/web-dashboard:latest"
-  "hankook/sensor-gateway:latest"
-  "hankook/analytics-engine:latest"
+  "smarttire/api-server:latest"
+  "smarttire/web-dashboard:latest"
+  "smarttire/sensor-gateway:latest"
+  "smarttire/analytics-engine:latest"
 )
 
 for image in "${IMAGES[@]}"; do
@@ -1431,4 +1431,4 @@ storage_scaling:
 
 **🎯 체계적인 운영 관리를 통해 안정적이고 효율적인 시스템을 유지하세요!**
 
-© 2024 HankookTire SmartSensor 2.0. All rights reserved.
+© 2024 SmartTire SmartSensor 2.0. All rights reserved.

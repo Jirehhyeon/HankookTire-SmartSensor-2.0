@@ -776,7 +776,7 @@ data:
     # HankookTire 애플리케이션 로그
     - type: log
       paths:
-        - /var/log/hankook/*.log
+        - /var/log/smarttire/*.log
       fields:
         log_type: application
         service: hankook-smartsensor

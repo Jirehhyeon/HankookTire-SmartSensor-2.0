@@ -1,10 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: hankook-api
-  namespace: hankook-smartsensor
+  name: smarttire-api
+  namespace: smarttire-smartsensor
   labels:
-    app: hankook-api
+    app: smarttire-api
     version: v2.0.0
     component: backend
 spec:
@@ -16,21 +16,21 @@ spec:
       maxSurge: 1
   selector:
     matchLabels:
-      app: hankook-api
+      app: smarttire-api
   template:
     metadata:
       labels:
-        app: hankook-api
+        app: smarttire-api
         version: v2.0.0
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
     spec:
-      serviceAccountName: hankook-service-account
+      serviceAccountName: smarttire-service-account
       containers:
       - name: api
-        image: hankook/smartsensor-api:2.0.0
+        image: smarttire/smartsensor-api:2.0.0
         ports:
         - containerPort: 8000
           name: http
@@ -117,16 +117,16 @@ spec:
                 - key: app
                   operator: In
                   values:
-                  - hankook-api
+                  - smarttire-api
               topologyKey: kubernetes.io/hostname
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: api-service
-  namespace: hankook-smartsensor
+  namespace: smarttire-smartsensor
   labels:
-    app: hankook-api
+    app: smarttire-api
   annotations:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8001"
@@ -142,18 +142,18 @@ spec:
     protocol: TCP
     name: metrics
   selector:
-    app: hankook-api
+    app: smarttire-api
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: hankook-api-hpa
-  namespace: hankook-smartsensor
+  name: smarttire-api-hpa
+  namespace: smarttire-smartsensor
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: hankook-api
+    name: smarttire-api
   minReplicas: 3
   maxReplicas: 10
   metrics:
@@ -189,10 +189,10 @@ spec:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: hankook-api-pdb
-  namespace: hankook-smartsensor
+  name: smarttire-api-pdb
+  namespace: smarttire-smartsensor
 spec:
   minAvailable: 2
   selector:
     matchLabels:
-      app: hankook-api
+      app: smarttire-api

@@ -1,17 +1,17 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: hankook-smartsensor
+  name: smarttire-sensor
   labels:
-    name: hankook-smartsensor
+    name: smarttire-sensor
     environment: production
     team: iot-platform
 ---
 apiVersion: v1
 kind: ResourceQuota
 metadata:
-  name: hankook-resource-quota
-  namespace: hankook-smartsensor
+  name: smarttire-resource-quota
+  namespace: smarttire-smartsensor
 spec:
   hard:
     requests.cpu: "10"
@@ -26,8 +26,8 @@ spec:
 apiVersion: v1
 kind: LimitRange
 metadata:
-  name: hankook-limit-range
-  namespace: hankook-smartsensor
+  name: smarttire-limit-range
+  namespace: smarttire-smartsensor
 spec:
   limits:
   - default:
@@ -41,8 +41,8 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: hankook-network-policy
-  namespace: hankook-smartsensor
+  name: smarttire-network-policy
+  namespace: smarttire-smartsensor
 spec:
   podSelector: {}
   policyTypes:
@@ -52,7 +52,7 @@ spec:
   - from:
     - namespaceSelector:
         matchLabels:
-          name: hankook-smartsensor
+          name: smarttire-sensor
     - namespaceSelector:
         matchLabels:
           name: ingress-nginx
@@ -62,16 +62,16 @@ spec:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: hankook-service-account
-  namespace: hankook-smartsensor
+  name: smarttire-service-account
+  namespace: smarttire-smartsensor
   labels:
-    app: hankook-smartsensor
+    app: smarttire-smartsensor
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  namespace: hankook-smartsensor
-  name: hankook-role
+  namespace: smarttire-smartsensor
+  name: smarttire-role
 rules:
 - apiGroups: [""]
   resources: ["pods", "services", "endpoints", "configmaps", "secrets"]
@@ -83,13 +83,13 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: hankook-role-binding
-  namespace: hankook-smartsensor
+  name: smarttire-role-binding
+  namespace: smarttire-smartsensor
 subjects:
 - kind: ServiceAccount
-  name: hankook-service-account
-  namespace: hankook-smartsensor
+  name: smarttire-service-account
+  namespace: smarttire-smartsensor
 roleRef:
   kind: Role
-  name: hankook-role
+  name: smarttire-role
   apiGroup: rbac.authorization.k8s.io

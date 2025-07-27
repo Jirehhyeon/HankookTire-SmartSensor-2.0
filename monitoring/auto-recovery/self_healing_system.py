@@ -47,7 +47,7 @@ from sklearn.preprocessing import StandardScaler
 import joblib
 
 # Configuration
-KUBERNETES_NAMESPACE = os.getenv('KUBERNETES_NAMESPACE', 'hankook-smartsensor')
+KUBERNETES_NAMESPACE = os.getenv('KUBERNETES_NAMESPACE', 'smarttire-smartsensor')
 MONITORING_NAMESPACE = os.getenv('MONITORING_NAMESPACE', 'monitoring')
 REDIS_HOST = os.getenv('REDIS_HOST', 'redis-service')
 REDIS_PORT = int(os.getenv('REDIS_PORT', '6379'))
@@ -413,8 +413,8 @@ class SelfHealingSystem:
             conn = psycopg2.connect(
                 host=POSTGRES_HOST,
                 port=5432,
-                database='hankook_sensors',
-                user='hankook',
+                database='smarttire_sensors',
+                user='smarttire',
                 password=os.getenv('POSTGRES_PASSWORD', 'password'),
                 connect_timeout=10
             )
@@ -428,12 +428,12 @@ class SelfHealingSystem:
                 cursor.execute("""
                     SELECT count(*) as deadlocks 
                     FROM pg_stat_database 
-                    WHERE datname = 'hankook_sensors'
+                    WHERE datname = 'smarttire_sensors'
                 """)
                 deadlocks = cursor.fetchone()['deadlocks']
                 
                 # 디스크 사용량 확인
-                cursor.execute("SELECT pg_size_pretty(pg_database_size('hankook_sensors')) as db_size")
+                cursor.execute("SELECT pg_size_pretty(pg_database_size('smarttire_sensors')) as db_size")
                 db_size = cursor.fetchone()['db_size']
                 
                 # 느린 쿼리 확인
@@ -569,7 +569,7 @@ class SelfHealingSystem:
             pods = self.k8s_core_v1.list_namespaced_pod(namespace=KUBERNETES_NAMESPACE)
             
             for pod in pods.items:
-                if not pod.metadata.name.startswith('hankook-'):
+                if not pod.metadata.name.startswith('smarttire-'):
                     continue
                 
                 # Pod 상태 분석
@@ -791,8 +791,8 @@ class SelfHealingSystem:
         try:
             # Pod 이름에서 deployment 이름 추출
             deployment_name = component.replace('pod-', '').split('-')[0]
-            if not deployment_name.startswith('hankook-'):
-                deployment_name = f"hankook-{deployment_name}"
+            if not deployment_name.startswith('smarttire-'):
+                deployment_name = f"smarttire-{deployment_name}"
             
             # Deployment 재시작 (Rolling Update)
             body = {
@@ -822,8 +822,8 @@ class SelfHealingSystem:
         """Deployment 스케일링"""
         try:
             deployment_name = component.replace('pod-', '').split('-')[0]
-            if not deployment_name.startswith('hankook-'):
-                deployment_name = f"hankook-{deployment_name}"
+            if not deployment_name.startswith('smarttire-'):
+                deployment_name = f"smarttire-{deployment_name}"
             
             # 현재 레플리카 수 조회
             deployment = self.k8s_apps_v1.read_namespaced_deployment(
@@ -890,8 +890,8 @@ class SelfHealingSystem:
                 conn = psycopg2.connect(
                     host=POSTGRES_HOST,
                     port=5432,
-                    database='hankook_sensors',
-                    user='hankook',
+                    database='smarttire_sensors',
+                    user='smarttire',
                     password=os.getenv('POSTGRES_PASSWORD', 'password')
                 )
                 
@@ -974,8 +974,8 @@ class SelfHealingSystem:
                 conn = psycopg2.connect(
                     host=POSTGRES_HOST,
                     port=5432,
-                    database='hankook_sensors',
-                    user='hankook',
+                    database='smarttire_sensors',
+                    user='smarttire',
                     password=os.getenv('POSTGRES_PASSWORD', 'password')
                 )
                 
@@ -1093,7 +1093,7 @@ class SelfHealingSystem:
     async def proactive_scale_up(self):
         """사전 스케일 업"""
         try:
-            deployments = ['hankook-api', 'hankook-frontend']
+            deployments = ['smarttire-api', 'smarttire-frontend']
             
             for deployment in deployments:
                 current_deployment = self.k8s_apps_v1.read_namespaced_deployment(
@@ -1120,7 +1120,7 @@ class SelfHealingSystem:
     async def proactive_scale_down(self):
         """사전 스케일 다운"""
         try:
-            deployments = ['hankook-api', 'hankook-frontend']
+            deployments = ['smarttire-api', 'smarttire-frontend']
             
             for deployment in deployments:
                 current_deployment = self.k8s_apps_v1.read_namespaced_deployment(
@@ -1178,7 +1178,7 @@ class SelfHealingSystem:
             
             test_candidates = []
             for pod in pods.items:
-                if (pod.metadata.name.startswith('hankook-') and 
+                if (pod.metadata.name.startswith('smarttire-') and 
                     'postgres' not in pod.metadata.name and 
                     pod.status.phase == 'Running'):
                     test_candidates.append(pod.metadata.name)
