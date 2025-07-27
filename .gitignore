@@ -1,0 +1,123 @@
+# 운영 체제
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 로그 파일
+*.log
+logs/
+*.log.*
+
+# 빌드 산출물
+build/
+dist/
+target/
+*.jar
+*.war
+*.ear
+
+# 의존성
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# 환경 설정
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+config/local.yaml
+config/secrets.yaml
+
+# 데이터베이스
+*.db
+*.sqlite
+*.sqlite3
+
+# 캐시
+.cache/
+.npm/
+.yarn/
+*.cache
+
+# 임시 파일
+tmp/
+temp/
+*.tmp
+*.temp
+
+# 백업 파일
+*.backup
+*.bak
+*.old
+
+# SSL 인증서 및 키
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+
+# Kubernetes 시크릿
+*-secret.yaml
+*secrets.yaml
+
+# 개인 정보
+credentials
+passwords
+tokens
+
+# 테스트 결과
+test-results/
+coverage/
+*.coverage
+
+# 모니터링 데이터
+monitoring/data/
+prometheus/data/
+grafana/data/
+
+# 성능 테스트 결과
+performance_results_*/
+
+# Docker
+.dockerignore
+
+# Helm
+charts/*/charts/
+charts/*/Chart.lock
+
+# 에디터 설정
+.editorconfig
+
+# 로컬 개발
+local/
+dev/
+.local/
+
+# 컴파일된 바이너리
+*.exe
+*.dll
+*.so
+*.dylib
+
+# 압축 파일
+*.zip
+*.tar.gz
+*.rar
+
+# 문서 생성 산출물
+site/
+_site/

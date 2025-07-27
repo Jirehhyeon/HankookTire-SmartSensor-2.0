@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: hankook-smartsensor
+  labels:
+    name: hankook-smartsensor
+    environment: production
+    team: iot-platform
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: hankook-resource-quota
+  namespace: hankook-smartsensor
+spec:
+  hard:
+    requests.cpu: "10"
+    requests.memory: 20Gi
+    limits.cpu: "20"
+    limits.memory: 40Gi
+    persistentvolumeclaims: "10"
+    services: "20"
+    secrets: "10"
+    configmaps: "10"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: hankook-limit-range
+  namespace: hankook-smartsensor
+spec:
+  limits:
+  - default:
+      cpu: "1"
+      memory: "2Gi"
+    defaultRequest:
+      cpu: "100m"
+      memory: "128Mi"
+    type: Container
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: hankook-network-policy
+  namespace: hankook-smartsensor
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: hankook-smartsensor
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+  egress:
+  - {}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hankook-service-account
+  namespace: hankook-smartsensor
+  labels:
+    app: hankook-smartsensor
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: hankook-smartsensor
+  name: hankook-role
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "endpoints", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: hankook-role-binding
+  namespace: hankook-smartsensor
+subjects:
+- kind: ServiceAccount
+  name: hankook-service-account
+  namespace: hankook-smartsensor
+roleRef:
+  kind: Role
+  name: hankook-role
+  apiGroup: rbac.authorization.k8s.io

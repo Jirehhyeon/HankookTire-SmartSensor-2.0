@@ -1,0 +1,360 @@
+groups:
+  # HankookTire SmartSensor 전용 알림 규칙
+  - name: hankook_sensor_alerts
+    interval: 30s
+    rules:
+    
+    # 센서 연결 상태 알림
+    - alert: SensorDisconnected
+      expr: up{job=~".*sensor.*"} == 0
+      for: 5m
+      labels:
+        severity: warning
+        service: sensor
+        team: iot
+      annotations:
+        summary: "IoT 센서 연결 끊김"
+        description: "센서 {{ $labels.instance }}가 5분 이상 연결되지 않았습니다."
+        runbook_url: "https://docs.hankook-smartsensor.com/runbooks/sensor-disconnected"
+        
+    # 센서 배터리 부족 알림
+    - alert: SensorLowBattery
+      expr: sensor_battery_voltage < 3.0
+      for: 2m
+      labels:
+        severity: warning
+        service: sensor
+        team: iot
+      annotations:
+        summary: "센서 배터리 부족"
+        description: "센서 {{ $labels.device_id }}의 배터리 전압이 {{ $value }}V로 낮습니다."
+        action_required: "배터리 교체 또는 충전이 필요합니다."
+        
+    # 센서 온도 이상 감지
+    - alert: SensorTemperatureAnomaly
+      expr: |
+        (
+          sensor_temperature_celsius > 60 or 
+          sensor_temperature_celsius < -20
+        ) and 
+        sensor_temperature_celsius != 0
+      for: 1m
+      labels:
+        severity: critical
+        service: sensor
+        team: iot
+      annotations:
+        summary: "센서 온도 이상"
+        description: "센서 {{ $labels.device_id }}에서 비정상적인 온도 {{ $value }}°C가 감지되었습니다."
+        location: "{{ $labels.location }}"
+        
+    # 센서 습도 이상 감지
+    - alert: SensorHumidityAnomaly
+      expr: sensor_humidity_percent > 95 or sensor_humidity_percent < 5
+      for: 3m
+      labels:
+        severity: warning
+        service: sensor
+        team: iot
+      annotations:
+        summary: "센서 습도 이상"
+        description: "센서 {{ $labels.device_id }}에서 비정상적인 습도 {{ $value }}%가 감지되었습니다."
+        
+    # 센서 데이터 전송 지연
+    - alert: SensorDataDelay
+      expr: time() - sensor_last_seen_timestamp > 300
+      for: 1m
+      labels:
+        severity: warning
+        service: sensor
+        team: iot
+      annotations:
+        summary: "센서 데이터 전송 지연"
+        description: "센서 {{ $labels.device_id }}가 {{ $value }}초 동안 데이터를 전송하지 않았습니다."
+        
+    # 센서 신호 강도 약함
+    - alert: SensorWeakSignal
+      expr: sensor_signal_strength_dbm < -90
+      for: 10m
+      labels:
+        severity: info
+        service: sensor
+        team: iot
+      annotations:
+        summary: "센서 신호 강도 약함"
+        description: "센서 {{ $labels.device_id }}의 신호 강도가 {{ $value }}dBm로 약합니다."
+        
+    # 센서 데이터 품질 저하
+    - alert: SensorDataQualityDegraded
+      expr: sensor_data_quality_score < 70
+      for: 5m
+      labels:
+        severity: warning
+        service: sensor
+        team: iot
+      annotations:
+        summary: "센서 데이터 품질 저하"
+        description: "센서 {{ $labels.device_id }}의 데이터 품질 점수가 {{ $value }}점으로 저하되었습니다."
+        
+    # 센서 네트워크 지연
+    - alert: SensorNetworkLatency
+      expr: sensor_network_latency_ms > 1000
+      for: 5m
+      labels:
+        severity: warning
+        service: sensor
+        team: iot
+      annotations:
+        summary: "센서 네트워크 지연"
+        description: "센서 {{ $labels.device_id }}의 네트워크 지연시간이 {{ $value }}ms입니다."
+
+  # TPMS (타이어 압력 모니터링) 전용 알림
+  - name: hankook_tpms_alerts
+    interval: 15s
+    rules:
+    
+    # 타이어 압력 부족
+    - alert: TirePressureLow
+      expr: tpms_pressure_kpa < 200
+      for: 30s
+      labels:
+        severity: critical
+        service: tpms
+        team: safety
+      annotations:
+        summary: "타이어 압력 부족"
+        description: "차량 {{ $labels.vehicle_id }}, 타이어 위치 {{ $labels.tire_position }}번의 압력이 {{ $value }}kPa로 낮습니다."
+        safety_risk: "즉시 점검이 필요합니다."
+        
+    # 타이어 압력 과다
+    - alert: TirePressureHigh
+      expr: tpms_pressure_kpa > 300
+      for: 1m
+      labels:
+        severity: warning
+        service: tpms
+        team: safety
+      annotations:
+        summary: "타이어 압력 과다"
+        description: "차량 {{ $labels.vehicle_id }}, 타이어 위치 {{ $labels.tire_position }}번의 압력이 {{ $value }}kPa로 높습니다."
+        
+    # 타이어 온도 과열
+    - alert: TireTemperatureHigh
+      expr: tpms_temperature_celsius > 80
+      for: 1m
+      labels:
+        severity: critical
+        service: tpms
+        team: safety
+      annotations:
+        summary: "타이어 온도 과열"
+        description: "차량 {{ $labels.vehicle_id }}, 타이어 위치 {{ $labels.tire_position }}번의 온도가 {{ $value }}°C로 과열되었습니다."
+        safety_risk: "즉시 정차하여 점검하세요."
+        
+    # TPMS 센서 오류
+    - alert: TPMSSensorMalfunction
+      expr: tpms_sensor_status != 1
+      for: 2m
+      labels:
+        severity: warning
+        service: tpms
+        team: maintenance
+      annotations:
+        summary: "TPMS 센서 오류"
+        description: "차량 {{ $labels.vehicle_id }}, 타이어 위치 {{ $labels.tire_position }}번의 TPMS 센서에 오류가 발생했습니다."
+        
+    # TPMS 배터리 부족
+    - alert: TPMSBatteryLow
+      expr: tpms_battery_voltage < 2.5
+      for: 5m
+      labels:
+        severity: info
+        service: tpms
+        team: maintenance
+      annotations:
+        summary: "TPMS 센서 배터리 부족"
+        description: "차량 {{ $labels.vehicle_id }}, 타이어 위치 {{ $labels.tire_position }}번의 TPMS 센서 배터리가 {{ $value }}V로 부족합니다."
+
+  # 센서 네트워크 인프라 알림
+  - name: hankook_sensor_infrastructure
+    interval: 60s
+    rules:
+    
+    # IoT 게이트웨이 다운
+    - alert: IoTGatewayDown
+      expr: up{job="iot-gateway"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        service: infrastructure
+        team: platform
+      annotations:
+        summary: "IoT 게이트웨이 다운"
+        description: "IoT 게이트웨이 {{ $labels.instance }}가 다운되었습니다."
+        impact: "해당 지역의 센서 데이터 수집이 중단됩니다."
+        
+    # 센서 데이터 처리 지연
+    - alert: SensorDataProcessingBacklog
+      expr: sensor_processing_queue_size > 1000
+      for: 5m
+      labels:
+        severity: warning
+        service: processing
+        team: platform
+      annotations:
+        summary: "센서 데이터 처리 지연"
+        description: "센서 데이터 처리 큐에 {{ $value }}개의 대기 중인 메시지가 있습니다."
+        
+    # 센서 펌웨어 업데이트 실패
+    - alert: SensorFirmwareUpdateFailed
+      expr: increase(sensor_firmware_update_failures_total[1h]) > 0
+      for: 0m
+      labels:
+        severity: warning
+        service: maintenance
+        team: iot
+      annotations:
+        summary: "센서 펌웨어 업데이트 실패"
+        description: "지난 1시간 동안 {{ $value }}개의 센서에서 펌웨어 업데이트가 실패했습니다."
+        
+    # 센서 통신 오류율 증가
+    - alert: SensorCommunicationErrorRateHigh
+      expr: |
+        (
+          rate(sensor_communication_errors_total[5m]) / 
+          rate(sensor_communication_attempts_total[5m])
+        ) * 100 > 10
+      for: 3m
+      labels:
+        severity: warning
+        service: communication
+        team: infrastructure
+      annotations:
+        summary: "센서 통신 오류율 증가"
+        description: "센서 통신 오류율이 {{ $value | humanizePercentage }}로 증가했습니다."
+        
+    # 센서 클러스터 불균형
+    - alert: SensorClusterImbalance
+      expr: |
+        (
+          max(count by (cluster) (up{job=~".*sensor.*"})) - 
+          min(count by (cluster) (up{job=~".*sensor.*"}))
+        ) > 10
+      for: 10m
+      labels:
+        severity: info
+        service: infrastructure
+        team: platform
+      annotations:
+        summary: "센서 클러스터 불균형"
+        description: "센서 클러스터 간 센서 수 차이가 {{ $value }}개를 초과했습니다."
+
+  # 데이터 품질 및 이상 탐지
+  - name: hankook_data_quality_alerts
+    interval: 30s
+    rules:
+    
+    # 센서 데이터 스파이크 감지
+    - alert: SensorDataSpike
+      expr: |
+        abs(
+          sensor_temperature_celsius - 
+          avg_over_time(sensor_temperature_celsius[1h])
+        ) > 10
+      for: 1m
+      labels:
+        severity: warning
+        service: data-quality
+        team: analytics
+      annotations:
+        summary: "센서 데이터 급변 감지"
+        description: "센서 {{ $labels.device_id }}에서 온도 데이터가 평균 대비 {{ $value }}°C 급변했습니다."
+        
+    # 센서 데이터 정지 감지
+    - alert: SensorDataStagnant
+      expr: |
+        stddev_over_time(sensor_temperature_celsius[10m]) < 0.1 and
+        sensor_temperature_celsius > 0
+      for: 10m
+      labels:
+        severity: warning
+        service: data-quality
+        team: analytics
+      annotations:
+        summary: "센서 데이터 정지 감지"
+        description: "센서 {{ $labels.device_id }}에서 10분간 동일한 값이 지속되고 있습니다."
+        
+    # AI 모델 예측 정확도 저하
+    - alert: AIModelAccuracyDrop
+      expr: ai_model_accuracy_score < 0.8
+      for: 5m
+      labels:
+        severity: warning
+        service: ai-ml
+        team: data-science
+      annotations:
+        summary: "AI 모델 성능 저하"
+        description: "AI 모델 {{ $labels.model_name }}의 정확도가 {{ $value | humanizePercentage }}로 저하되었습니다."
+        
+    # 데이터 무결성 오류
+    - alert: DataIntegrityError
+      expr: increase(data_validation_failures_total[1h]) > 100
+      for: 0m
+      labels:
+        severity: critical
+        service: data-quality
+        team: platform
+      annotations:
+        summary: "데이터 무결성 오류"
+        description: "지난 1시간 동안 {{ $value }}건의 데이터 검증 실패가 발생했습니다."
+
+  # 비즈니스 메트릭 알림
+  - name: hankook_business_metrics
+    interval: 300s  # 5분 간격
+    rules:
+    
+    # 센서 가동률 저하
+    - alert: SensorUptimeBelowSLA
+      expr: |
+        (
+          avg_over_time(up{job=~".*sensor.*"}[24h]) * 100
+        ) < 99.5
+      for: 1h
+      labels:
+        severity: warning
+        service: sla
+        team: operations
+      annotations:
+        summary: "센서 SLA 위반"
+        description: "센서 가동률이 {{ $value | humanizePercentage }}로 SLA(99.5%) 미달입니다."
+        
+    # 데이터 수집율 저하
+    - alert: DataCollectionRateLow
+      expr: |
+        (
+          rate(sensor_data_points_collected_total[1h]) < 
+          rate(sensor_data_points_expected_total[1h]) * 0.95
+        )
+      for: 30m
+      labels:
+        severity: warning
+        service: collection
+        team: operations
+      annotations:
+        summary: "데이터 수집율 저하"
+        description: "데이터 수집율이 예상치의 95% 미만으로 떨어졌습니다."
+        
+    # 고객 서비스 응답 시간 증가
+    - alert: CustomerServiceResponseTimeSlow
+      expr: |
+        histogram_quantile(0.95, 
+          rate(http_request_duration_seconds_bucket{job="hankook-api"}[5m])
+        ) > 2
+      for: 5m
+      labels:
+        severity: warning
+        service: customer
+        team: support
+      annotations:
+        summary: "고객 서비스 응답 지연"
+        description: "고객 서비스 API의 95% 응답시간이 {{ $value }}초로 증가했습니다."

@@ -1,0 +1,132 @@
+apiVersion: 1
+
+datasources:
+  # Prometheus 메트릭 데이터소스
+  - name: 'Prometheus'
+    type: 'prometheus'
+    access: 'proxy'
+    url: 'http://prometheus-service:9090'
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: '15s'
+      queryTimeout: '60s'
+      httpMethod: 'POST'
+      
+      # 카스텀 헤더
+      customQueryParameters: 'max_source_resolution=5m'
+      
+      # Prometheus 특정 설정
+      prometheusType: 'Prometheus'
+      prometheusVersion: '2.47.0'
+      
+      # 캐시 설정
+      cacheLevel: 'High'
+      
+    # 헬스체크 설정
+    withCredentials: false
+    
+  # PostgreSQL 데이터베이스 (TimescaleDB)
+  - name: 'PostgreSQL-TimescaleDB'
+    type: 'postgres'
+    access: 'proxy'
+    url: 'postgres-service:5432'
+    database: 'hankook_sensors'
+    user: 'grafana_reader'
+    editable: true
+    jsonData:
+      sslmode: 'disable'
+      maxOpenConns: 10
+      maxIdleConns: 2
+      maxIdleConnsAuto: true
+      connMaxLifetime: 14400
+      postgresVersion: 1500
+      timescaledb: true
+    secureJsonData:
+      password: '${POSTGRES_GRAFANA_PASSWORD}'
+      
+  # Elasticsearch 로그 데이터소스
+  - name: 'Elasticsearch-Logs'
+    type: 'elasticsearch'
+    access: 'proxy'
+    url: 'http://elasticsearch-service:9200'
+    database: 'hankook-*'
+    editable: true
+    jsonData:
+      esVersion: '8.11.0'
+      timeField: '@timestamp'
+      maxConcurrentShardRequests: 5
+      includeFrozen: false
+      
+      # 인덱스 패턴
+      index: 'hankook-smartsensor-*'
+      interval: 'Daily'
+      
+      # 로그 레벨 설정
+      logLevelField: 'level'
+      logMessageField: 'message'
+      
+  # InfluxDB 시계열 데이터베이스 (선택사항)
+  - name: 'InfluxDB-Metrics'
+    type: 'influxdb'
+    access: 'proxy'
+    url: 'http://influxdb-service:8086'
+    database: 'hankook_metrics'
+    user: 'grafana'
+    editable: true
+    jsonData:
+      version: 'Flux'
+      organization: 'hankook-tire'
+      defaultBucket: 'sensor-metrics'
+      httpMode: 'POST'
+    secureJsonData:
+      token: '${INFLUXDB_TOKEN}'
+      
+  # Redis 캐시 모니터링 (플러그인 필요)
+  - name: 'Redis-Cache'
+    type: 'redis-datasource'
+    access: 'proxy' 
+    url: 'redis://redis-service:6379'
+    editable: true
+    jsonData:
+      client: 'standalone'
+      poolSize: 5
+      timeout: 10
+      pingInterval: 30
+    secureJsonData:
+      password: '${REDIS_PASSWORD}'
+      
+  # MQTT 브로커 메트릭 (Prometheus exporter 통해)
+  - name: 'MQTT-Metrics'
+    type: 'prometheus'
+    access: 'proxy'
+    url: 'http://mosquitto-service:9234'
+    editable: true
+    jsonData:
+      timeInterval: '30s'
+      queryTimeout: '30s'
+      
+  # TestData 데이터소스 (개발/테스트용)
+  - name: 'TestData'
+    type: 'testdata'
+    access: 'proxy'
+    editable: false
+    isDefault: false
+    
+  # CloudWatch (AWS 모니터링 - 선택사항)
+  - name: 'AWS-CloudWatch'
+    type: 'cloudwatch'
+    access: 'proxy'
+    editable: true
+    jsonData:
+      authType: 'keys'
+      defaultRegion: 'ap-northeast-2'  # 서울 리전
+      customMetricsNamespaces: 'HankookTire/SmartSensor'
+    secureJsonData:
+      accessKey: '${AWS_ACCESS_KEY_ID}'
+      secretKey: '${AWS_SECRET_ACCESS_KEY}'
+
+# 데이터소스 권한 설정
+deleteDatasources:
+  - name: 'TestData'
+    orgId: 1

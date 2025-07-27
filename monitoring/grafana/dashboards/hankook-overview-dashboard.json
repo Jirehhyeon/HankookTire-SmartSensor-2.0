@@ -1,0 +1,424 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "🚀 HankookTire SmartSensor 2.0 - System Overview",
+    "tags": ["hankook", "smartsensor", "overview", "iot"],
+    "timezone": "Asia/Seoul",
+    "panels": [
+      {
+        "id": 1,
+        "title": "🔋 System Health Score",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "avg(sensor_health_score{job=\"hankook-api\"})",
+            "legendFormat": "Health Score"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 50},
+                {"color": "green", "value": 80}
+              ]
+            },
+            "unit": "percent",
+            "min": 0,
+            "max": 100
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "📊 Active Sensors",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "count(up{job=~\".*sensor.*\"} == 1)",
+            "legendFormat": "Active Sensors"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"},
+            "unit": "short"
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "🌐 API Requests/sec",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"hankook-api\"}[5m])",
+            "legendFormat": "RPS"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "continuous-GrYlRd"},
+            "unit": "reqps"
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "⚡ System Uptime",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "(time() - process_start_time_seconds{job=\"hankook-api\"})",
+            "legendFormat": "Uptime"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"},
+            "unit": "s"
+          }
+        },
+        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0}
+      },
+      {
+        "id": 5,
+        "title": "📈 Sensor Data Rate (Messages/min)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(mqtt_messages_received_total{job=\"mosquitto\"}[1m]) * 60",
+            "legendFormat": "MQTT Messages"
+          },
+          {
+            "expr": "rate(websocket_messages_total{job=\"hankook-api\"}[1m]) * 60",
+            "legendFormat": "WebSocket Messages"
+          },
+          {
+            "expr": "rate(http_requests_total{job=\"hankook-api\", endpoint=\"/sensor/data\"}[1m]) * 60",
+            "legendFormat": "HTTP Sensor Data"
+          }
+        ],
+        "xAxis": {"show": true},
+        "yAxes": [
+          {
+            "label": "Messages/min",
+            "show": true
+          }
+        ],
+        "legend": {"show": true, "values": true, "current": true},
+        "gridPos": {"h": 9, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 6,
+        "title": "🔥 Top Alerts (Last 24h)",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "topk(10, count by (alertname) (ALERTS{alertstate=\"firing\"}))",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"Time": true, "__name__": true},
+              "renameByName": {
+                "alertname": "Alert Name",
+                "Value": "Count"
+              }
+            }
+          }
+        ],
+        "gridPos": {"h": 9, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 7,
+        "title": "🏭 Sensor Temperature Distribution",
+        "type": "heatmap",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(sensor_temperature_celsius_bucket[5m])) by (le))",
+            "legendFormat": "Temperature °C"
+          }
+        ],
+        "heatmap": {
+          "xBucketSize": "1m",
+          "yBucketSize": 2,
+          "yAxis": {
+            "min": -10,
+            "max": 50,
+            "unit": "celsius"
+          }
+        },
+        "gridPos": {"h": 9, "w": 12, "x": 0, "y": 17}
+      },
+      {
+        "id": 8,
+        "title": "💾 Database Performance",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "pg_stat_database_tup_inserted{datname=\"hankook_sensors\"}",
+            "legendFormat": "Inserts/sec"
+          },
+          {
+            "expr": "pg_stat_database_tup_fetched{datname=\"hankook_sensors\"}",
+            "legendFormat": "Fetches/sec"
+          },
+          {
+            "expr": "pg_stat_database_conflicts{datname=\"hankook_sensors\"}",
+            "legendFormat": "Conflicts"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Operations/sec",
+            "logBase": 1,
+            "show": true
+          }
+        ],
+        "gridPos": {"h": 9, "w": 12, "x": 12, "y": 17}
+      },
+      {
+        "id": 9,
+        "title": "🗺️ Sensor Locations (Active)",
+        "type": "geomap",
+        "targets": [
+          {
+            "expr": "sensor_last_seen{status=\"active\"}",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "vis": false
+              }
+            },
+            "mappings": [],
+            "color": {
+              "mode": "continuous-GrYlRd"
+            }
+          }
+        },
+        "options": {
+          "view": {
+            "id": "coords",
+            "lat": 37.5665,
+            "lon": 126.9780,
+            "zoom": 6
+          },
+          "controls": {
+            "mouseWheelZoom": true,
+            "showZoom": true,
+            "showAttribution": true
+          },
+          "layers": [
+            {
+              "config": {
+                "style": {
+                  "color": {
+                    "fixed": "green"
+                  },
+                  "opacity": 0.8,
+                  "rotation": {
+                    "fixed": 0,
+                    "max": 360,
+                    "min": -360,
+                    "mode": "mod"
+                  },
+                  "size": {
+                    "fixed": 5,
+                    "max": 15,
+                    "min": 2,
+                    "mode": "linear"
+                  },
+                  "symbol": {
+                    "fixed": "img/icons/marker/circle.svg",
+                    "mode": "fixed"
+                  },
+                  "textConfig": {
+                    "fontSize": 12,
+                    "offsetX": 0,
+                    "offsetY": 0,
+                    "textAlign": "center",
+                    "textBaseline": "middle"
+                  }
+                }
+              },
+              "location": {
+                "mode": "coords",
+                "latitude": "latitude",
+                "longitude": "longitude"
+              },
+              "name": "Active Sensors",
+              "tooltip": true,
+              "type": "markers"
+            }
+          ]
+        },
+        "gridPos": {"h": 12, "w": 24, "x": 0, "y": 26}
+      },
+      {
+        "id": 10,
+        "title": "📋 System Services Status",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "up{job=~\"hankook.*|postgres|redis|mosquitto\"}",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"Time": true, "__name__": true},
+              "renameByName": {
+                "job": "Service",
+                "instance": "Instance", 
+                "Value": "Status"
+              }
+            }
+          },
+          {
+            "id": "fieldOverride",
+            "options": {
+              "fieldName": "Status",
+              "properties": [
+                {
+                  "id": "mappings",
+                  "value": [
+                    {"options": {"0": {"text": "🔴 DOWN", "color": "red"}}, "type": "value"},
+                    {"options": {"1": {"text": "🟢 UP", "color": "green"}}, "type": "value"}
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 38}
+      },
+      {
+        "id": 11,
+        "title": "📊 Resource Usage Summary",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+            "format": "table",
+            "instant": true,
+            "legendFormat": "CPU %"
+          },
+          {
+            "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+            "format": "table", 
+            "instant": true,
+            "legendFormat": "Memory %"
+          },
+          {
+            "expr": "100 - ((node_filesystem_avail_bytes{mountpoint=\"/\"} * 100) / node_filesystem_size_bytes{mountpoint=\"/\"})",
+            "format": "table",
+            "instant": true,
+            "legendFormat": "Disk %"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "merge",
+            "options": {}
+          },
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"Time": true, "__name__": true},
+              "renameByName": {
+                "instance": "Node",
+                "Value #A": "CPU %",
+                "Value #B": "Memory %", 
+                "Value #C": "Disk %"
+              }
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 38}
+      },
+      {
+        "id": 12,
+        "title": "🔄 Data Flow Pipeline",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(sensor_data_received_total[5m])",
+            "legendFormat": "Data Received"
+          },
+          {
+            "expr": "rate(sensor_data_processed_total[5m])",
+            "legendFormat": "Data Processed"
+          },
+          {
+            "expr": "rate(sensor_data_stored_total[5m])",
+            "legendFormat": "Data Stored"
+          },
+          {
+            "expr": "rate(sensor_data_errors_total[5m])",
+            "legendFormat": "Processing Errors"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Records/sec",
+            "show": true
+          }
+        ],
+        "seriesOverrides": [
+          {
+            "alias": "Processing Errors",
+            "color": "#E24D42",
+            "yAxis": 2
+          }
+        ],
+        "gridPos": {"h": 9, "w": 24, "x": 0, "y": 46}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s",
+    "schemaVersion": 30,
+    "version": 1,
+    "links": [
+      {
+        "title": "🔧 System Administration",
+        "url": "/d/hankook-admin/hankook-administration",
+        "type": "dashboards"
+      },
+      {
+        "title": "📊 Sensor Analytics", 
+        "url": "/d/hankook-sensors/hankook-sensor-analytics",
+        "type": "dashboards"
+      },
+      {
+        "title": "🚨 Alert Management",
+        "url": "/d/hankook-alerts/hankook-alert-management",
+        "type": "dashboards"
+      }
+    ]
+  }
+}

@@ -1,0 +1,46 @@
+apiVersion: 1
+
+providers:
+  # HankookTire SmartSensor 대시보드 설정
+  - name: 'hankook-dashboards'
+    orgId: 1
+    folder: 'HankookTire SmartSensor 2.0'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+
+  # 시스템 모니터링 대시보드
+  - name: 'system-monitoring'
+    orgId: 1
+    folder: 'System Monitoring'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards/system
+
+  # IoT 센서 대시보드
+  - name: 'iot-sensors'
+    orgId: 1
+    folder: 'IoT Sensors'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 15
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards/sensors
+
+  # 알림 및 분석 대시보드
+  - name: 'analytics-alerts'
+    orgId: 1
+    folder: 'Analytics & Alerts'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 60
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards/analytics

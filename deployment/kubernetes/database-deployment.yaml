@@ -1,0 +1,487 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: hankook-smartsensor
+  labels:
+    app: postgres
+    component: database
+spec:
+  serviceName: postgres-headless
+  replicas: 3
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9187"
+    spec:
+      serviceAccountName: hankook-service-account
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+          name: postgres
+        env:
+        - name: POSTGRES_DB
+          value: "hankook_sensors"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: username
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: password
+        - name: POSTGRES_INITDB_ARGS
+          value: "--encoding=UTF-8 --locale=en_US.UTF-8"
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+        - name: postgres-config
+          mountPath: /etc/postgresql/postgresql.conf
+          subPath: postgresql.conf
+        - name: postgres-init
+          mountPath: /docker-entrypoint-initdb.d
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - exec pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" -h 127.0.0.1 -p 5432
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 6
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - exec pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" -h 127.0.0.1 -p 5432
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        securityContext:
+          runAsUser: 999
+          runAsGroup: 999
+          fsGroup: 999
+      - name: postgres-exporter
+        image: prometheuscommunity/postgres-exporter:v0.12.0
+        ports:
+        - containerPort: 9187
+          name: metrics
+        env:
+        - name: DATA_SOURCE_NAME
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: exporter-url
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+      volumes:
+      - name: postgres-config
+        configMap:
+          name: postgres-config
+      - name: postgres-init
+        configMap:
+          name: postgres-init-scripts
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-storage
+      labels:
+        app: postgres
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: "fast-ssd"
+      resources:
+        requests:
+          storage: 100Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: hankook-smartsensor
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+    protocol: TCP
+    name: postgres
+  selector:
+    app: postgres
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-headless
+  namespace: hankook-smartsensor
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 5432
+    targetPort: 5432
+    protocol: TCP
+    name: postgres
+  selector:
+    app: postgres
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: hankook-smartsensor
+data:
+  postgresql.conf: |
+    # PostgreSQL Configuration for HankookTire SmartSensor
+    
+    # Connection Settings
+    listen_addresses = '*'
+    port = 5432
+    max_connections = 200
+    superuser_reserved_connections = 3
+    
+    # Memory Settings
+    shared_buffers = 1GB
+    effective_cache_size = 3GB
+    maintenance_work_mem = 256MB
+    checkpoint_completion_target = 0.9
+    wal_buffers = 16MB
+    default_statistics_target = 100
+    random_page_cost = 1.1
+    effective_io_concurrency = 200
+    
+    # Write Ahead Logging
+    wal_level = replica
+    max_wal_senders = 3
+    max_replication_slots = 3
+    hot_standby = on
+    hot_standby_feedback = on
+    
+    # Performance
+    work_mem = 4MB
+    max_worker_processes = 8
+    max_parallel_workers_per_gather = 2
+    max_parallel_workers = 8
+    max_parallel_maintenance_workers = 2
+    
+    # Logging
+    log_destination = 'stderr'
+    logging_collector = on
+    log_directory = 'pg_log'
+    log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'
+    log_rotation_age = 1d
+    log_rotation_size = 10MB
+    log_min_duration_statement = 1000
+    log_connections = on
+    log_disconnections = on
+    log_lock_waits = on
+    log_statement = 'mod'
+    log_line_prefix = '%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
+    
+    # Checkpoint Settings
+    checkpoint_timeout = 10min
+    checkpoint_completion_target = 0.9
+    
+    # Archive Settings
+    archive_mode = on
+    archive_command = 'test ! -f /var/lib/postgresql/archive/%f && cp %p /var/lib/postgresql/archive/%f'
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-scripts
+  namespace: hankook-smartsensor
+data:
+  01-init-database.sql: |
+    -- HankookTire SmartSensor Database Initialization
+    
+    -- Create extensions
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pg_stat_statements";
+    CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+    CREATE EXTENSION IF NOT EXISTS "btree_gin";
+    CREATE EXTENSION IF NOT EXISTS "timescaledb" CASCADE;
+    
+    -- Create schemas
+    CREATE SCHEMA IF NOT EXISTS sensors;
+    CREATE SCHEMA IF NOT EXISTS analytics;
+    CREATE SCHEMA IF NOT EXISTS monitoring;
+    CREATE SCHEMA IF NOT EXISTS audit;
+    
+    -- Sensor data tables
+    CREATE TABLE IF NOT EXISTS sensors.devices (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        device_id VARCHAR(50) UNIQUE NOT NULL,
+        device_type VARCHAR(20) NOT NULL,
+        location_info JSONB,
+        firmware_version VARCHAR(20),
+        last_seen TIMESTAMPTZ,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    
+    CREATE TABLE IF NOT EXISTS sensors.sensor_readings (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        device_id VARCHAR(50) NOT NULL,
+        timestamp TIMESTAMPTZ NOT NULL,
+        temperature REAL,
+        humidity REAL,
+        pressure REAL,
+        light_level INTEGER,
+        battery_voltage REAL,
+        signal_strength INTEGER,
+        acceleration_x REAL,
+        acceleration_y REAL,
+        acceleration_z REAL,
+        gyro_x REAL,
+        gyro_y REAL,
+        gyro_z REAL,
+        quality_score REAL,
+        metadata JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    
+    -- Convert to TimescaleDB hypertable
+    SELECT create_hypertable('sensors.sensor_readings', 'timestamp', if_not_exists => TRUE);
+    
+    -- TPMS specific tables
+    CREATE TABLE IF NOT EXISTS sensors.tpms_data (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        device_id VARCHAR(50) NOT NULL,
+        tire_position INTEGER NOT NULL CHECK (tire_position BETWEEN 1 AND 4),
+        timestamp TIMESTAMPTZ NOT NULL,
+        pressure_kpa REAL NOT NULL,
+        temperature_celsius REAL NOT NULL,
+        battery_voltage REAL,
+        alarm_status BOOLEAN DEFAULT false,
+        sensor_id VARCHAR(20),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    
+    SELECT create_hypertable('sensors.tpms_data', 'timestamp', if_not_exists => TRUE);
+    
+    -- AI analysis results
+    CREATE TABLE IF NOT EXISTS analytics.ai_predictions (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        device_id VARCHAR(50) NOT NULL,
+        prediction_type VARCHAR(50) NOT NULL,
+        timestamp TIMESTAMPTZ NOT NULL,
+        predicted_value REAL,
+        confidence_score REAL,
+        model_version VARCHAR(20),
+        input_data JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    
+    SELECT create_hypertable('analytics.ai_predictions', 'timestamp', if_not_exists => TRUE);
+    
+    -- Anomaly detection results
+    CREATE TABLE IF NOT EXISTS analytics.anomalies (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        device_id VARCHAR(50) NOT NULL,
+        timestamp TIMESTAMPTZ NOT NULL,
+        anomaly_type VARCHAR(50) NOT NULL,
+        severity VARCHAR(20) NOT NULL,
+        anomaly_score REAL,
+        affected_sensors TEXT[],
+        description TEXT,
+        resolved BOOLEAN DEFAULT false,
+        resolved_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    
+    -- System monitoring
+    CREATE TABLE IF NOT EXISTS monitoring.system_health (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        component VARCHAR(50) NOT NULL,
+        timestamp TIMESTAMPTZ NOT NULL,
+        status VARCHAR(20) NOT NULL,
+        metrics JSONB,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    
+    SELECT create_hypertable('monitoring.system_health', 'timestamp', if_not_exists => TRUE);
+    
+    -- Audit logs
+    CREATE TABLE IF NOT EXISTS audit.activity_logs (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        user_id VARCHAR(50),
+        action VARCHAR(50) NOT NULL,
+        resource_type VARCHAR(50),
+        resource_id VARCHAR(100),
+        details JSONB,
+        ip_address INET,
+        user_agent TEXT,
+        timestamp TIMESTAMPTZ DEFAULT NOW()
+    );
+    
+    -- Indexes for performance
+    CREATE INDEX IF NOT EXISTS idx_sensor_readings_device_timestamp 
+        ON sensors.sensor_readings (device_id, timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_sensor_readings_timestamp 
+        ON sensors.sensor_readings (timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_tpms_device_timestamp 
+        ON sensors.tpms_data (device_id, timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_tpms_position_timestamp 
+        ON sensors.tpms_data (tire_position, timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_ai_predictions_device_type 
+        ON analytics.ai_predictions (device_id, prediction_type, timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_anomalies_device_timestamp 
+        ON analytics.anomalies (device_id, timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_anomalies_unresolved 
+        ON analytics.anomalies (resolved, timestamp DESC) WHERE NOT resolved;
+    
+    -- GIN indexes for JSONB columns
+    CREATE INDEX IF NOT EXISTS idx_devices_location_gin 
+        ON sensors.devices USING GIN (location_info);
+    CREATE INDEX IF NOT EXISTS idx_sensor_readings_metadata_gin 
+        ON sensors.sensor_readings USING GIN (metadata);
+    CREATE INDEX IF NOT EXISTS idx_ai_predictions_input_gin 
+        ON analytics.ai_predictions USING GIN (input_data);
+    
+    -- Continuous aggregates for TimescaleDB
+    CREATE MATERIALIZED VIEW IF NOT EXISTS sensors.sensor_readings_hourly
+    WITH (timescaledb.continuous) AS
+    SELECT 
+        device_id,
+        time_bucket('1 hour', timestamp) AS hour,
+        AVG(temperature) AS avg_temperature,
+        MIN(temperature) AS min_temperature,
+        MAX(temperature) AS max_temperature,
+        AVG(humidity) AS avg_humidity,
+        AVG(pressure) AS avg_pressure,
+        AVG(battery_voltage) AS avg_battery_voltage,
+        COUNT(*) AS reading_count
+    FROM sensors.sensor_readings
+    GROUP BY device_id, hour;
+    
+    -- Data retention policies
+    SELECT add_retention_policy('sensors.sensor_readings', INTERVAL '1 year');
+    SELECT add_retention_policy('sensors.tpms_data', INTERVAL '2 years');
+    SELECT add_retention_policy('analytics.ai_predictions', INTERVAL '6 months');
+    SELECT add_retention_policy('monitoring.system_health', INTERVAL '3 months');
+    
+    -- Compression policies
+    SELECT add_compression_policy('sensors.sensor_readings', INTERVAL '7 days');
+    SELECT add_compression_policy('sensors.tpms_data', INTERVAL '7 days');
+    
+    -- Create functions for common operations
+    CREATE OR REPLACE FUNCTION sensors.get_latest_sensor_data(device_id_param VARCHAR)
+    RETURNS TABLE (
+        timestamp TIMESTAMPTZ,
+        temperature REAL,
+        humidity REAL,
+        pressure REAL,
+        battery_voltage REAL,
+        quality_score REAL
+    ) AS $$
+    BEGIN
+        RETURN QUERY
+        SELECT 
+            sr.timestamp,
+            sr.temperature,
+            sr.humidity,
+            sr.pressure,
+            sr.battery_voltage,
+            sr.quality_score
+        FROM sensors.sensor_readings sr
+        WHERE sr.device_id = device_id_param
+        ORDER BY sr.timestamp DESC
+        LIMIT 1;
+    END;
+    $$ LANGUAGE plpgsql;
+    
+    -- Create trigger function for updating updated_at
+    CREATE OR REPLACE FUNCTION update_updated_at_column()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        NEW.updated_at = NOW();
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    
+    -- Apply trigger to devices table
+    CREATE TRIGGER update_devices_updated_at 
+        BEFORE UPDATE ON sensors.devices 
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    
+    -- Grant permissions
+    GRANT USAGE ON SCHEMA sensors TO PUBLIC;
+    GRANT USAGE ON SCHEMA analytics TO PUBLIC;
+    GRANT USAGE ON SCHEMA monitoring TO PUBLIC;
+    GRANT SELECT ON ALL TABLES IN SCHEMA sensors TO PUBLIC;
+    GRANT SELECT ON ALL TABLES IN SCHEMA analytics TO PUBLIC;
+    GRANT SELECT ON ALL TABLES IN SCHEMA monitoring TO PUBLIC;
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-backup-job
+  namespace: hankook-smartsensor
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: postgres-backup
+            image: postgres:15-alpine
+            env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: database-credentials
+                  key: password
+            command:
+            - /bin/sh
+            - -c
+            - |
+              BACKUP_FILE="/backup/hankook_sensors_$(date +%Y%m%d_%H%M%S).sql"
+              pg_dump -h postgres-service -U hankook -d hankook_sensors > $BACKUP_FILE
+              gzip $BACKUP_FILE
+              echo "Backup completed: $BACKUP_FILE.gz"
+              
+              # Keep only last 7 backups
+              ls -t /backup/*.sql.gz | tail -n +8 | xargs -r rm
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backup
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: postgres-backup-pvc
+          restartPolicy: OnFailure

@@ -1,0 +1,412 @@
+version: '3.8'
+
+services:
+  # ===== Backend API Server =====
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hankook-api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://hankook:smartsensor2024@postgres:5432/hankook_sensors
+      - REDIS_URL=redis://redis:6379
+      - MQTT_BROKER=mqtt://mosquitto:1883
+      - AI_MODEL_PATH=/app/models
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./backend/models:/app/models
+      - ./backend/logs:/app/logs
+    depends_on:
+      - postgres
+      - redis
+      - mosquitto
+    networks:
+      - hankook-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===== PostgreSQL Database =====
+  postgres:
+    image: postgres:15-alpine
+    container_name: hankook-postgres
+    environment:
+      - POSTGRES_DB=hankook_sensors
+      - POSTGRES_USER=hankook
+      - POSTGRES_PASSWORD=smartsensor2024
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - hankook-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hankook -d hankook_sensors"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===== Redis Cache =====
+  redis:
+    image: redis:7-alpine
+    container_name: hankook-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass smartsensor2024
+    volumes:
+      - redis_data:/data
+    networks:
+      - hankook-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # ===== MQTT Broker =====
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: hankook-mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ./mqtt/passwd:/mosquitto/config/passwd
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+    networks:
+      - hankook-network
+    restart: unless-stopped
+
+  # ===== Frontend Web Application =====
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: hankook-frontend
+    ports:
+      - "3000:80"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_WS_URL=ws://localhost:8000/ws
+      - REACT_APP_ENVIRONMENT=production
+    depends_on:
+      - api
+    networks:
+      - hankook-network
+    restart: unless-stopped
+
+  # ===== AI/ML Service =====
+  ai-service:
+    build:
+      context: ./ai
+      dockerfile: Dockerfile
+    container_name: hankook-ai
+    environment:
+      - MODEL_PATH=/app/models
+      - REDIS_URL=redis://redis:6379
+      - GPU_ENABLED=true
+    volumes:
+      - ./ai/models:/app/models
+      - ./ai/logs:/app/logs
+    depends_on:
+      - redis
+    networks:
+      - hankook-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # ===== Time Series Database (InfluxDB) =====
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: hankook-influxdb
+    ports:
+      - "8086:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=hankook
+      - DOCKER_INFLUXDB_INIT_PASSWORD=smartsensor2024
+      - DOCKER_INFLUXDB_INIT_ORG=hankook-tire
+      - DOCKER_INFLUXDB_INIT_BUCKET=sensor-data
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=hankook-smartsensor-token-2024
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+      - influxdb_config:/etc/influxdb2
+    networks:
+      - hankook-network
+    restart: unless-stopped
+
+  # ===== Grafana Dashboard =====
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: hankook-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=smartsensor2024
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - influxdb
+    networks:
+      - hankook-network
+    restart: unless-stopped
+
+  # ===== Nginx Reverse Proxy =====
+  nginx:
+    image: nginx:alpine
+    container_name: hankook-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      - api
+      - frontend
+      - grafana
+    networks:
+      - hankook-network
+    restart: unless-stopped
+
+  # ===== Prometheus Monitoring =====
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: hankook-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - hankook-network
+    restart: unless-stopped
+
+  # ===== Elasticsearch for Logs =====
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: hankook-elasticsearch
+    environment:
+      - cluster.name=hankook-logs
+      - node.name=hankook-es-node
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - hankook-network
+    restart: unless-stopped
+
+  # ===== Kibana for Log Visualization =====
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: hankook-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - hankook-network
+    restart: unless-stopped
+
+  # ===== Logstash for Log Processing =====
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.11.0
+    container_name: hankook-logstash
+    volumes:
+      - ./monitoring/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+    depends_on:
+      - elasticsearch
+    networks:
+      - hankook-network
+    restart: unless-stopped
+
+  # ===== Node Exporter for System Metrics =====
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: hankook-node-exporter
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    ports:
+      - "9100:9100"
+    networks:
+      - hankook-network
+    restart: unless-stopped
+
+  # ===== Kafka for Real-time Data Streaming =====
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: hankook-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - hankook-network
+    restart: unless-stopped
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: hankook-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - hankook-network
+    restart: unless-stopped
+
+  # ===== MinIO Object Storage =====
+  minio:
+    image: minio/minio:latest
+    container_name: hankook-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=hankook
+      - MINIO_ROOT_PASSWORD=smartsensor2024
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - hankook-network
+    restart: unless-stopped
+
+  # ===== Jupyter Notebook for AI Development =====
+  jupyter:
+    build:
+      context: ./ai
+      dockerfile: Dockerfile.jupyter
+    container_name: hankook-jupyter
+    ports:
+      - "8888:8888"
+    environment:
+      - JUPYTER_TOKEN=smartsensor2024
+    volumes:
+      - ./ai/notebooks:/home/jovyan/work
+      - ./ai/models:/home/jovyan/models
+      - ./ai/data:/home/jovyan/data
+    networks:
+      - hankook-network
+    restart: unless-stopped
+
+  # ===== Backup Service =====
+  backup:
+    build:
+      context: ./backup
+      dockerfile: Dockerfile
+    container_name: hankook-backup
+    environment:
+      - BACKUP_SCHEDULE=0 2 * * *  # 매일 새벽 2시
+      - S3_BUCKET=hankook-sensor-backup
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    volumes:
+      - postgres_data:/backup/postgres:ro
+      - influxdb_data:/backup/influxdb:ro
+      - ./backup/scripts:/app/scripts
+    depends_on:
+      - postgres
+      - influxdb
+    networks:
+      - hankook-network
+    restart: unless-stopped
+
+  # ===== Health Check Service =====
+  healthcheck:
+    build:
+      context: ./monitoring/healthcheck
+      dockerfile: Dockerfile
+    container_name: hankook-healthcheck
+    environment:
+      - CHECK_INTERVAL=30
+      - ALERT_WEBHOOK=${SLACK_WEBHOOK_URL}
+    depends_on:
+      - api
+      - postgres
+      - redis
+      - mosquitto
+    networks:
+      - hankook-network
+    restart: unless-stopped
+
+networks:
+  hankook-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  mosquitto_data:
+    driver: local
+  mosquitto_logs:
+    driver: local
+  influxdb_data:
+    driver: local
+  influxdb_config:
+    driver: local
+  grafana_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  kafka_data:
+    driver: local
+  minio_data:
+    driver: local

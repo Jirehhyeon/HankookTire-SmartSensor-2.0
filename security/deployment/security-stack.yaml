@@ -1,0 +1,774 @@
+# HankookTire SmartSensor 2.0 - Security Stack Deployment
+# 차세대 통합 스마트 타이어 센서 시스템 보안 스택
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: hankook-security
+  labels:
+    security.hankook.io/managed: "true"
+    security.hankook.io/classification: "restricted"
+---
+# OAuth2 Authentication Server Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-server
+  namespace: hankook-security
+  labels:
+    app: oauth2-server
+    component: authentication
+    security.hankook.io/service: "auth"
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 2
+  selector:
+    matchLabels:
+      app: oauth2-server
+  template:
+    metadata:
+      labels:
+        app: oauth2-server
+        component: authentication
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8001"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: oauth2-server
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
+      containers:
+      - name: oauth2-server
+        image: hankook/oauth2-server:v2.0.0
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8001
+          protocol: TCP
+        - name: metrics
+          containerPort: 8002
+          protocol: TCP
+        env:
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: jwt-secrets
+              key: secret-key
+        - name: POSTGRES_HOST
+          value: "postgres-service.hankook-smartsensor.svc.cluster.local"
+        - name: POSTGRES_USER
+          value: "hankook"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: password
+        - name: REDIS_HOST
+          value: "redis-service.hankook-smartsensor.svc.cluster.local"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: password
+        - name: RATE_LIMIT_REQUESTS
+          value: "1000"
+        - name: RATE_LIMIT_WINDOW
+          value: "3600"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: auth-config
+          mountPath: /app/config
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: auth-config
+        configMap:
+          name: oauth2-config
+      - name: tmp
+        emptyDir: {}
+---
+# OAuth2 Server Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-service
+  namespace: hankook-security
+  labels:
+    app: oauth2-server
+    component: authentication
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8001
+    targetPort: http
+    protocol: TCP
+  - name: metrics
+    port: 8002
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app: oauth2-server
+---
+# Network Security Manager Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: network-security-manager
+  namespace: hankook-security
+  labels:
+    app: network-security-manager
+    component: network-security
+    security.hankook.io/service: "firewall"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: network-security-manager
+  template:
+    metadata:
+      labels:
+        app: network-security-manager
+        component: network-security
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8003"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: network-security-manager
+      hostNetwork: true  # 네트워크 보안을 위해 호스트 네트워크 접근
+      dnsPolicy: ClusterFirstWithHostNet
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
+      containers:
+      - name: network-security-manager
+        image: hankook/network-security-manager:v2.0.0
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8003
+          protocol: TCP
+        - name: metrics
+          containerPort: 8004
+          protocol: TCP
+        env:
+        - name: POSTGRES_HOST
+          value: "postgres-service.hankook-smartsensor.svc.cluster.local"
+        - name: POSTGRES_USER
+          value: "hankook"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: password
+        - name: REDIS_HOST
+          value: "redis-service.hankook-smartsensor.svc.cluster.local"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: password
+        - name: DEFAULT_RATE_LIMIT
+          value: "1000"
+        - name: MAX_FAILED_ATTEMPTS
+          value: "5"
+        - name: BAN_DURATION
+          value: "3600"
+        - name: GEOIP_DB_PATH
+          value: "/opt/geoip/GeoLite2-Country.mmdb"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "300m"
+          limits:
+            memory: "1Gi"
+            cpu: "800m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        volumeMounts:
+        - name: geoip-data
+          mountPath: /opt/geoip
+          readOnly: true
+        - name: security-config
+          mountPath: /app/config
+          readOnly: true
+      volumes:
+      - name: geoip-data
+        configMap:
+          name: geoip-database
+      - name: security-config
+        configMap:
+          name: security-config
+---
+# Network Security Manager Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: network-security-service
+  namespace: hankook-security
+  labels:
+    app: network-security-manager
+    component: network-security
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8003
+    targetPort: http
+    protocol: TCP
+  - name: metrics
+    port: 8004
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app: network-security-manager
+---
+# Crypto Manager Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crypto-manager
+  namespace: hankook-security
+  labels:
+    app: crypto-manager
+    component: encryption
+    security.hankook.io/service: "crypto"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: crypto-manager
+  template:
+    metadata:
+      labels:
+        app: crypto-manager
+        component: encryption
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8005"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: crypto-manager
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
+      containers:
+      - name: crypto-manager
+        image: hankook/crypto-manager:v2.0.0
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8005
+          protocol: TCP
+        - name: metrics
+          containerPort: 8006
+          protocol: TCP
+        env:
+        - name: MASTER_KEY
+          valueFrom:
+            secretKeyRef:
+              name: crypto-secrets
+              key: master-key
+        - name: POSTGRES_HOST
+          value: "postgres-service.hankook-smartsensor.svc.cluster.local"
+        - name: POSTGRES_USER
+          value: "hankook"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: password
+        - name: REDIS_HOST
+          value: "redis-service.hankook-smartsensor.svc.cluster.local"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-credentials
+              key: password
+        - name: KEY_ROTATION_DAYS
+          value: "90"
+        - name: HSM_ENABLED
+          value: "false"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        volumeMounts:
+        - name: crypto-config
+          mountPath: /app/config
+          readOnly: true
+        - name: key-storage
+          mountPath: /app/keys
+      volumes:
+      - name: crypto-config
+        configMap:
+          name: crypto-config
+      - name: key-storage
+        persistentVolumeClaim:
+          claimName: crypto-key-storage
+---
+# Crypto Manager Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: crypto-service
+  namespace: hankook-security
+  labels:
+    app: crypto-manager
+    component: encryption
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8005
+    targetPort: http
+    protocol: TCP
+  - name: metrics
+    port: 8006
+    targetPort: metrics
+    protocol: TCP
+  selector:
+    app: crypto-manager
+---
+# Security Secrets
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jwt-secrets
+  namespace: hankook-security
+  labels:
+    app: oauth2-server
+    component: authentication
+type: Opaque
+data:
+  secret-key: # Base64 encoded JWT secret key
+    aGFua29vay1zbWFydC1zZW5zb3ItMi4wLWp3dC1zZWNyZXQta2V5LWZvci1wcm9kdWN0aW9u
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: crypto-secrets
+  namespace: hankook-security
+  labels:
+    app: crypto-manager
+    component: encryption
+type: Opaque
+data:
+  master-key: # Base64 encoded master encryption key
+    aGFua29vay1zbWFydC1zZW5zb3ItMi4wLW1hc3Rlci1lbmNyeXB0aW9uLWtleS1mb3ItcHJvZHVjdGlvbg==
+---
+# Security ConfigMaps
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oauth2-config
+  namespace: hankook-security
+  labels:
+    app: oauth2-server
+    component: authentication
+data:
+  oauth2.yaml: |
+    server:
+      port: 8001
+      metrics_port: 8002
+    
+    jwt:
+      access_token_expire_minutes: 30
+      refresh_token_expire_days: 30
+      algorithm: "HS256"
+    
+    rate_limiting:
+      enabled: true
+      requests_per_hour: 1000
+      burst_size: 100
+    
+    security:
+      password_min_length: 12
+      password_complexity: true
+      mfa_enabled: true
+      session_timeout: 1800
+    
+    logging:
+      level: "INFO"
+      format: "json"
+      audit_enabled: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-config
+  namespace: hankook-security
+  labels:
+    app: network-security-manager
+    component: network-security
+data:
+  security.yaml: |
+    firewall:
+      default_action: "deny"
+      log_all_connections: true
+      
+    rate_limiting:
+      default_limit: 1000
+      window_seconds: 3600
+      burst_allowance: 100
+      
+    geo_blocking:
+      enabled: true
+      allowed_countries: ["KR", "US", "JP", "DE", "GB", "CA", "AU", "SG"]
+      
+    intrusion_detection:
+      enabled: true
+      sensitivity: "medium"
+      auto_block: true
+      
+    ddos_protection:
+      enabled: true
+      threshold_requests_per_second: 1000
+      threshold_concurrent_connections: 10000
+      
+    ip_reputation:
+      enabled: true
+      update_interval: 3600
+      
+    logging:
+      level: "INFO"
+      format: "json"
+      retention_days: 90
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: crypto-config
+  namespace: hankook-security
+  labels:
+    app: crypto-manager
+    component: encryption
+data:
+  crypto.yaml: |
+    encryption:
+      default_algorithm: "AES-256-GCM"
+      key_rotation_enabled: true
+      key_rotation_days: 90
+      
+    signing:
+      default_algorithm: "RSA-PSS-SHA256"
+      key_size: 2048
+      
+    hsm:
+      enabled: false
+      provider: "softhsm"
+      
+    key_management:
+      backup_enabled: true
+      backup_encryption: true
+      audit_logging: true
+      
+    performance:
+      cache_size: 1000
+      cache_ttl: 300
+      
+    logging:
+      level: "INFO"
+      format: "json"
+      audit_enabled: true
+---
+# ServiceAccounts
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: oauth2-server
+  namespace: hankook-security
+  labels:
+    app: oauth2-server
+    component: authentication
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: network-security-manager
+  namespace: hankook-security
+  labels:
+    app: network-security-manager
+    component: network-security
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: crypto-manager
+  namespace: hankook-security
+  labels:
+    app: crypto-manager
+    component: encryption
+---
+# RBAC
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: network-security-manager
+  labels:
+    component: network-security
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "endpoints"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["networking.k8s.io"]
+  resources: ["networkpolicies"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+- apiGroups: ["extensions", "networking.k8s.io"]
+  resources: ["ingresses"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: network-security-manager
+  labels:
+    component: network-security
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: network-security-manager
+subjects:
+- kind: ServiceAccount
+  name: network-security-manager
+  namespace: hankook-security
+---
+# PersistentVolumeClaims
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: crypto-key-storage
+  namespace: hankook-security
+  labels:
+    app: crypto-manager
+    component: encryption
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ssd
+  resources:
+    requests:
+      storage: 10Gi
+---
+# NetworkPolicies
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: security-stack-network-policy
+  namespace: hankook-security
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # OAuth2 Server
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: hankook-smartsensor
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8001
+  # Network Security Manager
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: hankook-smartsensor
+    ports:
+    - protocol: TCP
+      port: 8003
+  # Crypto Manager
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: hankook-smartsensor
+    ports:
+    - protocol: TCP
+      port: 8005
+  # Metrics (Prometheus)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 8002
+    - protocol: TCP
+      port: 8004
+    - protocol: TCP
+      port: 8006
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow PostgreSQL
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: hankook-smartsensor
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow Redis
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: hankook-smartsensor
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow HTTPS for external services
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+---
+# HorizontalPodAutoscaler for OAuth2 Server
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: oauth2-server-hpa
+  namespace: hankook-security
+  labels:
+    app: oauth2-server
+    component: authentication
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: oauth2-server
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+---
+# PodDisruptionBudget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: oauth2-server-pdb
+  namespace: hankook-security
+  labels:
+    app: oauth2-server
+    component: authentication
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: oauth2-server
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: network-security-manager-pdb
+  namespace: hankook-security
+  labels:
+    app: network-security-manager
+    component: network-security
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: network-security-manager
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: crypto-manager-pdb
+  namespace: hankook-security
+  labels:
+    app: crypto-manager
+    component: encryption
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: crypto-manager

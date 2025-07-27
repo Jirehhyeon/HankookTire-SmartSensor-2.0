@@ -1,0 +1,838 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: elasticsearch
+  namespace: hankook-smartsensor
+  labels:
+    app: elasticsearch
+    component: logging
+spec:
+  serviceName: elasticsearch-headless
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: elasticsearch
+  template:
+    metadata:
+      labels:
+        app: elasticsearch
+    spec:
+      serviceAccountName: hankook-service-account
+      initContainers:
+      - name: increase-vm-max-map
+        image: busybox:1.35
+        command:
+        - sysctl
+        - -w
+        - vm.max_map_count=262144
+        securityContext:
+          privileged: true
+      - name: increase-fd-ulimit
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - ulimit -n 65536
+        securityContext:
+          privileged: true
+      containers:
+      - name: elasticsearch
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+        ports:
+        - containerPort: 9200
+          name: rest
+        - containerPort: 9300
+          name: inter-node
+        env:
+        - name: cluster.name
+          value: "hankook-logs"
+        - name: node.name
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: discovery.type
+          value: "single-node"
+        - name: ES_JAVA_OPTS
+          value: "-Xms1g -Xmx1g"
+        - name: xpack.security.enabled
+          value: "false"
+        - name: xpack.security.transport.ssl.enabled
+          value: "false"
+        - name: xpack.security.http.ssl.enabled
+          value: "false"
+        - name: network.host
+          value: "0.0.0.0"
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "2Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+        volumeMounts:
+        - name: elasticsearch-data
+          mountPath: /usr/share/elasticsearch/data
+        livenessProbe:
+          httpGet:
+            path: /_cluster/health
+            port: 9200
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /_cluster/health?wait_for_status=yellow&timeout=5s
+            port: 9200
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+  volumeClaimTemplates:
+  - metadata:
+      name: elasticsearch-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: "fast-ssd"
+      resources:
+        requests:
+          storage: 100Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch-service
+  namespace: hankook-smartsensor
+  labels:
+    app: elasticsearch
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9200
+    targetPort: 9200
+    protocol: TCP
+    name: rest
+  - port: 9300
+    targetPort: 9300
+    protocol: TCP
+    name: inter-node
+  selector:
+    app: elasticsearch
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch-headless
+  namespace: hankook-smartsensor
+  labels:
+    app: elasticsearch
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 9200
+    targetPort: 9200
+    protocol: TCP
+    name: rest
+  - port: 9300
+    targetPort: 9300
+    protocol: TCP
+    name: inter-node
+  selector:
+    app: elasticsearch
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kibana
+  namespace: hankook-smartsensor
+  labels:
+    app: kibana
+    component: logging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kibana
+  template:
+    metadata:
+      labels:
+        app: kibana
+    spec:
+      serviceAccountName: hankook-service-account
+      containers:
+      - name: kibana
+        image: docker.elastic.co/kibana/kibana:8.11.0
+        ports:
+        - containerPort: 5601
+          name: kibana
+        env:
+        - name: ELASTICSEARCH_HOSTS
+          value: "http://elasticsearch-service:9200"
+        - name: SERVER_NAME
+          value: "kibana.hankook-smartsensor.com"
+        - name: SERVER_BASEPATH
+          value: "/kibana"
+        - name: SERVER_REWRITEBASEPATH
+          value: "true"
+        - name: LOGGING_DEST
+          value: "stdout"
+        - name: ELASTICSEARCH_USERNAME
+          value: "elastic"
+        - name: ELASTICSEARCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: elasticsearch-credentials
+              key: password
+              optional: true
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+        volumeMounts:
+        - name: kibana-config
+          mountPath: /usr/share/kibana/config/kibana.yml
+          subPath: kibana.yml
+        livenessProbe:
+          httpGet:
+            path: /kibana/api/status
+            port: 5601
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /kibana/api/status
+            port: 5601
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+      volumes:
+      - name: kibana-config
+        configMap:
+          name: kibana-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibana-service
+  namespace: hankook-smartsensor
+  labels:
+    app: kibana
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5601
+    targetPort: 5601
+    protocol: TCP
+    name: kibana
+  selector:
+    app: kibana
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logstash
+  namespace: hankook-smartsensor
+  labels:
+    app: logstash
+    component: logging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: logstash
+  template:
+    metadata:
+      labels:
+        app: logstash
+    spec:
+      serviceAccountName: hankook-service-account
+      containers:
+      - name: logstash
+        image: docker.elastic.co/logstash/logstash:8.11.0
+        ports:
+        - containerPort: 5044
+          name: beats
+        - containerPort: 9600
+          name: monitoring
+        env:
+        - name: LS_JAVA_OPTS
+          value: "-Xms1g -Xmx1g"
+        - name: PIPELINE_WORKERS
+          value: "2"
+        - name: PIPELINE_BATCH_SIZE
+          value: "1000"
+        - name: PIPELINE_BATCH_DELAY
+          value: "50"
+        resources:
+          requests:
+            cpu: "300m"
+            memory: "1Gi"
+          limits:
+            cpu: "1500m"
+            memory: "3Gi"
+        volumeMounts:
+        - name: logstash-config
+          mountPath: /usr/share/logstash/pipeline
+        - name: logstash-patterns
+          mountPath: /usr/share/logstash/patterns
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9600
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9600
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+      volumes:
+      - name: logstash-config
+        configMap:
+          name: logstash-config
+      - name: logstash-patterns
+        configMap:
+          name: logstash-patterns
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: logstash-service
+  namespace: hankook-smartsensor
+  labels:
+    app: logstash
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5044
+    targetPort: 5044
+    protocol: TCP
+    name: beats
+  - port: 9600
+    targetPort: 9600
+    protocol: TCP
+    name: monitoring
+  selector:
+    app: logstash
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: filebeat
+  namespace: hankook-smartsensor
+  labels:
+    app: filebeat
+    component: logging
+spec:
+  selector:
+    matchLabels:
+      app: filebeat
+  template:
+    metadata:
+      labels:
+        app: filebeat
+    spec:
+      serviceAccountName: filebeat-service-account
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: filebeat
+        image: docker.elastic.co/beats/filebeat:8.11.0
+        args:
+        - -c
+        - /etc/filebeat.yml
+        - -e
+        env:
+        - name: ELASTICSEARCH_HOST
+          value: "elasticsearch-service"
+        - name: ELASTICSEARCH_PORT
+          value: "9200"
+        - name: LOGSTASH_HOST
+          value: "logstash-service"
+        - name: LOGSTASH_PORT
+          value: "5044"
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "100Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        volumeMounts:
+        - name: filebeat-config
+          mountPath: /etc/filebeat.yml
+          subPath: filebeat.yml
+        - name: varlibdockercontainers
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+        - name: varlog
+          mountPath: /var/log
+          readOnly: true
+        - name: dockersock
+          mountPath: /var/run/docker.sock
+          readOnly: true
+        securityContext:
+          runAsUser: 0
+          privileged: true
+      volumes:
+      - name: filebeat-config
+        configMap:
+          name: filebeat-config
+      - name: varlibdockercontainers
+        hostPath:
+          path: /var/lib/docker/containers
+      - name: varlog
+        hostPath:
+          path: /var/log
+      - name: dockersock
+        hostPath:
+          path: /var/run/docker.sock
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: filebeat-service-account
+  namespace: hankook-smartsensor
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: filebeat-cluster-role
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - namespaces
+  - events
+  - pods
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["extensions"]
+  resources:
+  - replicasets
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources:
+  - statefulsets
+  - deployments
+  - replicasets
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: filebeat-cluster-role-binding
+subjects:
+- kind: ServiceAccount
+  name: filebeat-service-account
+  namespace: hankook-smartsensor
+roleRef:
+  kind: ClusterRole
+  name: filebeat-cluster-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kibana-config
+  namespace: hankook-smartsensor
+data:
+  kibana.yml: |
+    server.name: kibana
+    server.host: "0.0.0.0"
+    server.port: 5601
+    server.basePath: "/kibana"
+    server.rewriteBasePath: true
+    
+    elasticsearch.hosts: ["http://elasticsearch-service:9200"]
+    elasticsearch.requestTimeout: 30000
+    elasticsearch.shardTimeout: 30000
+    
+    logging.dest: stdout
+    logging.silent: false
+    logging.quiet: false
+    logging.verbose: false
+    
+    ops.interval: 10000
+    
+    # Kibana 보안 설정
+    xpack.security.enabled: false
+    xpack.monitoring.ui.container.elasticsearch.enabled: true
+    
+    # 한국어 지원
+    i18n.locale: "ko-KR"
+    
+    # 인덱스 패턴 설정
+    kibana.defaultAppId: "dashboard"
+    
+    # 캐시 설정
+    server.maxPayloadBytes: 1048576
+    
+    # HankookTire 커스텀 설정
+    server.customResponseHeaders:
+      "X-Frame-Options": "SAMEORIGIN"
+      "X-Content-Type-Options": "nosniff"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logstash-config
+  namespace: hankook-smartsensor
+data:
+  logstash.conf: |
+    input {
+      beats {
+        port => 5044
+      }
+      
+      # MQTT 센서 데이터 수집
+      http {
+        port => 8080
+        codec => json
+        additional_codecs => {
+          "application/json" => "json"
+        }
+        tags => ["mqtt", "sensor"]
+      }
+      
+      # Syslog 수집
+      syslog {
+        port => 514
+        tags => ["syslog"]
+      }
+    }
+    
+    filter {
+      # Kubernetes 로그 파싱
+      if [kubernetes] {
+        if [kubernetes][container][name] == "hankook-api" {
+          grok {
+            match => { 
+              "message" => "%{TIMESTAMP_ISO8601:timestamp} \[%{LOGLEVEL:level}\] %{DATA:logger}: %{GREEDYDATA:message}" 
+            }
+            overwrite => [ "message" ]
+            tag_on_failure => ["_grokparsefailure_api"]
+          }
+          
+          # API 요청 로그 파싱
+          if [message] =~ "HTTP" {
+            grok {
+              match => { 
+                "message" => "%{WORD:method} %{URIPATH:path} HTTP/%{NUMBER:http_version} %{NUMBER:response_code} %{NUMBER:response_time}ms" 
+              }
+              tag_on_failure => ["_grokparsefailure_http"]
+            }
+            
+            mutate {
+              convert => { 
+                "response_code" => "integer"
+                "response_time" => "float"
+              }
+            }
+          }
+        }
+        
+        # PostgreSQL 로그 파싱
+        if [kubernetes][container][name] == "postgres" {
+          grok {
+            match => { 
+              "message" => "%{TIMESTAMP_ISO8601:timestamp} \[%{NUMBER:pid}\]: \[%{NUMBER:line}\] user=%{WORD:user},db=%{WORD:database},app=%{WORD:application},client=%{IP:client_ip} %{GREEDYDATA:message}" 
+            }
+            overwrite => [ "message" ]
+            tag_on_failure => ["_grokparsefailure_postgres"]
+          }
+        }
+        
+        # Redis 로그 파싱
+        if [kubernetes][container][name] == "redis" {
+          grok {
+            match => { 
+              "message" => "%{NUMBER:pid}:%{WORD:role} %{TIMESTAMP_ISO8601:timestamp} %{WORD:level} %{GREEDYDATA:message}" 
+            }
+            overwrite => [ "message" ]
+            tag_on_failure => ["_grokparsefailure_redis"]
+          }
+        }
+        
+        # MQTT 로그 파싱
+        if [kubernetes][container][name] == "mosquitto" {
+          grok {
+            match => { 
+              "message" => "%{TIMESTAMP_ISO8601:timestamp}: %{GREEDYDATA:message}" 
+            }
+            overwrite => [ "message" ]
+            tag_on_failure => ["_grokparsefailure_mqtt"]
+          }
+        }
+      }
+      
+      # 센서 데이터 파싱
+      if "sensor" in [tags] {
+        json {
+          source => "message"
+        }
+        
+        # 센서 데이터 enrichment
+        if [device_id] {
+          mutate {
+            add_field => { "[@metadata][index_name]" => "hankook-sensor-data-%{+YYYY.MM.dd}" }
+          }
+        }
+        
+        # 지리적 위치 정보 추가
+        if [location] {
+          if [location][lat] and [location][lon] {
+            mutate {
+              add_field => { 
+                "[geoip][location][lat]" => "%{[location][lat]}"
+                "[geoip][location][lon]" => "%{[location][lon]}"
+              }
+            }
+          }
+        }
+      }
+      
+      # 공통 필드 추가
+      mutate {
+        add_field => { 
+          "[@metadata][index_prefix]" => "hankook-smartsensor"
+          "cluster" => "production"
+          "environment" => "production"
+        }
+      }
+      
+      # 타임스탬프 파싱
+      date {
+        match => [ "timestamp", "ISO8601" ]
+        target => "@timestamp"
+      }
+      
+      # IP 주소 지리적 위치 정보
+      if [client_ip] {
+        geoip {
+          source => "client_ip"
+          target => "geoip"
+        }
+      }
+      
+      # 불필요한 필드 제거
+      mutate {
+        remove_field => [ "beat", "input", "prospector", "source", "offset" ]
+      }
+    }
+    
+    output {
+      # Elasticsearch 출력
+      elasticsearch {
+        hosts => ["elasticsearch-service:9200"]
+        
+        # 동적 인덱스 이름
+        index => "%{[@metadata][index_prefix]}-%{+YYYY.MM.dd}"
+        
+        # 센서 데이터는 별도 인덱스
+        if "sensor" in [tags] {
+          index => "hankook-sensor-data-%{+YYYY.MM.dd}"
+        } else if [kubernetes][container][name] {
+          index => "hankook-%{[kubernetes][container][name]}-%{+YYYY.MM.dd}"
+        }
+        
+        # 템플릿 설정
+        template_name => "hankook-smartsensor"
+        template_pattern => "hankook-*"
+        template => "/usr/share/logstash/templates/hankook-template.json"
+        template_overwrite => true
+        
+        # 성능 최적화
+        flush_size => 1000
+        idle_flush_time => 5
+      }
+      
+      # 디버깅용 stdout (개발환경에서만)
+      if [level] == "DEBUG" {
+        stdout { 
+          codec => rubydebug 
+        }
+      }
+      
+      # 크리티컬 로그는 별도 알림
+      if [level] == "CRITICAL" or [level] == "ERROR" {
+        http {
+          url => "https://api.hankook-smartsensor.com/webhooks/critical-log"
+          http_method => "post"
+          format => "json"
+          headers => {
+            "Authorization" => "Bearer webhook-token"
+            "Content-Type" => "application/json"
+          }
+        }
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logstash-patterns
+  namespace: hankook-smartsensor
+data:
+  hankook-patterns: |
+    # HankookTire SmartSensor 커스텀 패턴
+    
+    HANKOOK_TIMESTAMP %{YEAR}-%{MONTHNUM}-%{MONTHDAY}[T ]%{HOUR}:?%{MINUTE}(?::?%{SECOND})?%{ISO8601_TIMEZONE}?
+    HANKOOK_LOGLEVEL (TRACE|DEBUG|INFO|WARN|WARNING|ERROR|CRITICAL|FATAL)
+    HANKOOK_DEVICEID HK_[A-Fa-f0-9]{8,16}
+    HANKOOK_SENSORTYPE (DHT22|BMP280|MPU6050|LIGHT|BATTERY|TPMS)
+    HANKOOK_LOCATION \[%{NUMBER:latitude},%{NUMBER:longitude}\]
+    
+    # API 패턴
+    HANKOOK_APILOG %{HANKOOK_TIMESTAMP:timestamp} \[%{HANKOOK_LOGLEVEL:level}\] %{DATA:logger}: %{WORD:method} %{URIPATH:path} - %{NUMBER:response_code} - %{NUMBER:response_time}ms
+    
+    # 센서 데이터 패턴
+    HANKOOK_SENSORLOG %{HANKOOK_TIMESTAMP:timestamp} %{HANKOOK_DEVICEID:device_id} %{HANKOOK_SENSORTYPE:sensor_type}: %{GREEDYDATA:sensor_data}
+    
+    # MQTT 메시지 패턴
+    HANKOOK_MQTTLOG %{HANKOOK_TIMESTAMP:timestamp}: %{WORD:client_id} %{WORD:action} topic=%{DATA:topic} qos=%{NUMBER:qos}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: filebeat-config
+  namespace: hankook-smartsensor
+data:
+  filebeat.yml: |
+    filebeat.inputs:
+    
+    # Kubernetes 컨테이너 로그 수집
+    - type: container
+      paths:
+        - /var/log/containers/*hankook*.log
+        - /var/log/containers/*postgres*.log
+        - /var/log/containers/*redis*.log
+        - /var/log/containers/*mosquitto*.log
+        - /var/log/containers/*prometheus*.log
+        - /var/log/containers/*grafana*.log
+      
+      # 멀티라인 로그 처리
+      multiline.pattern: '^\d{4}-\d{2}-\d{2}'
+      multiline.negate: true
+      multiline.match: after
+      
+      # 메타데이터 추가
+      processors:
+      - add_kubernetes_metadata:
+          host: ${NODE_NAME}
+          matchers:
+          - logs_path:
+              logs_path: "/var/log/containers/"
+      
+      # 필드 추가
+      - add_fields:
+          target: hankook
+          fields:
+            cluster: production
+            environment: production
+            version: "2.0.0"
+      
+      # 로그 레벨 파싱
+      - dissect:
+          tokenizer: "%{timestamp} [%{level}] %{message}"
+          field: "message"
+          target_prefix: "log"
+          ignore_failure: true
+    
+    # 시스템 로그 수집
+    - type: log
+      paths:
+        - /var/log/syslog
+        - /var/log/messages
+        - /var/log/kern.log
+      fields:
+        log_type: system
+      fields_under_root: true
+    
+    # HankookTire 애플리케이션 로그
+    - type: log
+      paths:
+        - /var/log/hankook/*.log
+      fields:
+        log_type: application
+        service: hankook-smartsensor
+      fields_under_root: true
+      
+      # JSON 로그 파싱
+      json.keys_under_root: true
+      json.add_error_key: true
+    
+    # 출력 설정
+    output.logstash:
+      hosts: ["logstash-service:5044"]
+      compression_level: 3
+      bulk_max_size: 2048
+      timeout: 30s
+      
+      # 로드 밸런싱
+      loadbalance: true
+      
+      # 재시도 설정
+      max_retries: 3
+      backoff.init: 1s
+      backoff.max: 60s
+    
+    # 로깅 설정
+    logging.level: info
+    logging.to_files: true
+    logging.files:
+      path: /var/log/filebeat
+      name: filebeat
+      keepfiles: 7
+      permissions: 0644
+    
+    # 프로세서 설정
+    processors:
+    - add_host_metadata:
+        when.not.contains.tags: forwarded
+    
+    - add_docker_metadata: ~
+    
+    - add_kubernetes_metadata:
+        host: ${NODE_NAME}
+        matchers:
+        - logs_path:
+            logs_path: "/var/log/containers/"
+    
+    # 성능 튜닝
+    queue.mem:
+      events: 4096
+      flush.min_events: 512
+      flush.timeout: 5s
+    
+    # 모니터링
+    monitoring.enabled: true
+    monitoring.elasticsearch:
+      hosts: ["elasticsearch-service:9200"]
+      
+    # XPack 설정
+    xpack.monitoring.enabled: true

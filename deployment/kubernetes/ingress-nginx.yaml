@@ -1,0 +1,268 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hankook-smartsensor-ingress
+  namespace: hankook-smartsensor
+  labels:
+    app: hankook-smartsensor
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+spec:
+  tls:
+  - hosts:
+    - api.hankook-smartsensor.com
+    - dashboard.hankook-smartsensor.com
+    - monitoring.hankook-smartsensor.com
+    secretName: hankook-smartsensor-tls
+  rules:
+  # API 서비스
+  - host: api.hankook-smartsensor.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api-service
+            port:
+              number: 8000
+      - path: /ws
+        pathType: Prefix
+        backend:
+          service:
+            name: api-service
+            port:
+              number: 8000
+  
+  # 웹 대시보드
+  - host: dashboard.hankook-smartsensor.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-service
+            port:
+              number: 80
+  
+  # 모니터링 대시보드
+  - host: monitoring.hankook-smartsensor.com
+    http:
+      paths:
+      - path: /grafana
+        pathType: Prefix
+        backend:
+          service:
+            name: grafana-service
+            port:
+              number: 3000
+      - path: /prometheus
+        pathType: Prefix
+        backend:
+          service:
+            name: prometheus-service
+            port:
+              number: 9090
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: hankook-smartsensor
+  labels:
+    app: frontend
+    component: web
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      serviceAccountName: hankook-service-account
+      containers:
+      - name: frontend
+        image: hankook/smartsensor-frontend:2.0.0
+        ports:
+        - containerPort: 80
+          name: http
+        env:
+        - name: REACT_APP_API_URL
+          value: "https://api.hankook-smartsensor.com"
+        - name: REACT_APP_WS_URL
+          value: "wss://api.hankook-smartsensor.com/ws"
+        - name: REACT_APP_ENVIRONMENT
+          value: "production"
+        - name: REACT_APP_VERSION
+          value: "2.0.0"
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        securityContext:
+          runAsUser: 101
+          runAsGroup: 101
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: hankook-smartsensor
+  labels:
+    app: frontend
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  selector:
+    app: frontend
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ingress-network-policy
+  namespace: hankook-smartsensor
+spec:
+  podSelector:
+    matchLabels:
+      app: hankook-api
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-network-policy
+  namespace: hankook-smartsensor
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 80
+---
+# SSL Certificate for Let's Encrypt
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: hankook-smartsensor-cert
+  namespace: hankook-smartsensor
+spec:
+  secretName: hankook-smartsensor-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+  - api.hankook-smartsensor.com
+  - dashboard.hankook-smartsensor.com
+  - monitoring.hankook-smartsensor.com
+---
+# Rate Limiting ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-rate-limit-config
+  namespace: hankook-smartsensor
+data:
+  nginx.conf: |
+    # Rate limiting zones
+    limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+    limit_req_zone $binary_remote_addr zone=dashboard:10m rate=30r/s;
+    limit_req_zone $binary_remote_addr zone=websocket:10m rate=5r/s;
+    
+    # Connection limiting
+    limit_conn_zone $binary_remote_addr zone=addr:10m;
+    
+    server {
+        listen 80;
+        server_name api.hankook-smartsensor.com;
+        
+        # API rate limiting
+        location /api/ {
+            limit_req zone=api burst=20 nodelay;
+            limit_conn addr 10;
+            proxy_pass http://api-service:8000;
+        }
+        
+        # WebSocket rate limiting
+        location /ws {
+            limit_req zone=websocket burst=5 nodelay;
+            limit_conn addr 5;
+            proxy_pass http://api-service:8000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
+    }
+    
+    server {
+        listen 80;
+        server_name dashboard.hankook-smartsensor.com;
+        
+        # Dashboard rate limiting
+        location / {
+            limit_req zone=dashboard burst=50 nodelay;
+            limit_conn addr 20;
+            proxy_pass http://frontend-service:80;
+        }
+    }

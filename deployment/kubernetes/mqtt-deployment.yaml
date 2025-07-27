@@ -1,0 +1,272 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mosquitto
+  namespace: hankook-smartsensor
+  labels:
+    app: mosquitto
+    component: mqtt-broker
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # MQTT broker는 단일 인스턴스 권장
+  selector:
+    matchLabels:
+      app: mosquitto
+  template:
+    metadata:
+      labels:
+        app: mosquitto
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9234"
+    spec:
+      serviceAccountName: hankook-service-account
+      containers:
+      - name: mosquitto
+        image: eclipse-mosquitto:2.0
+        ports:
+        - containerPort: 1883
+          name: mqtt
+        - containerPort: 8883
+          name: mqtt-tls
+        - containerPort: 9001
+          name: websocket
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        volumeMounts:
+        - name: mosquitto-config
+          mountPath: /mosquitto/config
+        - name: mosquitto-data
+          mountPath: /mosquitto/data
+        - name: mosquitto-logs
+          mountPath: /mosquitto/log
+        - name: mosquitto-certs
+          mountPath: /mosquitto/certs
+          readOnly: true
+        livenessProbe:
+          tcpSocket:
+            port: 1883
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          tcpSocket:
+            port: 1883
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        securityContext:
+          runAsUser: 1883
+          runAsGroup: 1883
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+      - name: mosquitto-exporter
+        image: sapcc/mosquitto-exporter:0.8.0
+        ports:
+        - containerPort: 9234
+          name: metrics
+        env:
+        - name: BROKER_ENDPOINT
+          value: "tcp://localhost:1883"
+        - name: MQTT_USER
+          valueFrom:
+            secretKeyRef:
+              name: mosquitto-credentials
+              key: username
+        - name: MQTT_PASS
+          valueFrom:
+            secretKeyRef:
+              name: mosquitto-credentials
+              key: password
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+      volumes:
+      - name: mosquitto-config
+        configMap:
+          name: mosquitto-config
+      - name: mosquitto-data
+        persistentVolumeClaim:
+          claimName: mosquitto-data-pvc
+      - name: mosquitto-logs
+        persistentVolumeClaim:
+          claimName: mosquitto-logs-pvc
+      - name: mosquitto-certs
+        secret:
+          secretName: mosquitto-tls-certs
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mosquitto-service
+  namespace: hankook-smartsensor
+  labels:
+    app: mosquitto
+spec:
+  type: ClusterIP
+  ports:
+  - port: 1883
+    targetPort: 1883
+    protocol: TCP
+    name: mqtt
+  - port: 8883
+    targetPort: 8883
+    protocol: TCP
+    name: mqtt-tls
+  - port: 9001
+    targetPort: 9001
+    protocol: TCP
+    name: websocket
+  - port: 9234
+    targetPort: 9234
+    protocol: TCP
+    name: metrics
+  selector:
+    app: mosquitto
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mosquitto-external
+  namespace: hankook-smartsensor
+  labels:
+    app: mosquitto
+  annotations:
+    service.beta.kubernetes.io/external-traffic: OnlyLocal
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 1883
+    targetPort: 1883
+    protocol: TCP
+    name: mqtt
+  - port: 8883
+    targetPort: 8883
+    protocol: TCP
+    name: mqtt-tls
+  selector:
+    app: mosquitto
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mosquitto-config
+  namespace: hankook-smartsensor
+data:
+  mosquitto.conf: |
+    # HankookTire SmartSensor MQTT Broker Configuration
+    
+    # General
+    user mosquitto
+    pid_file /var/run/mosquitto.pid
+    
+    # Network
+    bind_address 0.0.0.0
+    
+    # MQTT Protocol
+    listener 1883
+    protocol mqtt
+    allow_anonymous false
+    password_file /mosquitto/config/passwd
+    
+    # MQTT over TLS
+    listener 8883
+    protocol mqtt
+    cafile /mosquitto/certs/ca.crt
+    certfile /mosquitto/certs/server.crt
+    keyfile /mosquitto/certs/server.key
+    require_certificate false
+    
+    # WebSocket
+    listener 9001
+    protocol websockets
+    allow_anonymous false
+    
+    # Persistence
+    persistence true
+    persistence_location /mosquitto/data/
+    autosave_interval 60
+    autosave_on_changes false
+    
+    # Logging
+    log_dest file /mosquitto/log/mosquitto.log
+    log_type error
+    log_type warning
+    log_type notice
+    log_type information
+    log_type debug
+    log_timestamp true
+    log_timestamp_format %Y-%m-%dT%H:%M:%S
+    
+    # Message Settings
+    max_inflight_messages 20
+    max_queued_messages 100
+    message_size_limit 8192
+    
+    # Connection Settings
+    max_connections 1000
+    keepalive_interval 60
+    
+    # Security
+    allow_duplicate_messages false
+    
+    # Bridge Configuration (if needed for cloud connectivity)
+    # connection bridge-to-cloud
+    # address cloud.hankook-smartsensor.com:8883
+    # bridge_cafile /mosquitto/certs/cloud-ca.crt
+    # remote_username hankook-bridge
+    # remote_password bridge-password
+    # topic hankook/# out 0
+    # bridge_insecure false
+  
+  passwd: |
+    # MQTT 사용자 계정 (mosquitto_passwd로 생성된 해시)
+    # 실제 배포 시에는 Secret으로 관리
+    hankook:$7$101$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    sensor:$7$101$xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mosquitto-data-pvc
+  namespace: hankook-smartsensor
+  labels:
+    app: mosquitto
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: "fast-ssd"
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mosquitto-logs-pvc
+  namespace: hankook-smartsensor
+  labels:
+    app: mosquitto
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: "standard"
+  resources:
+    requests:
+      storage: 2Gi

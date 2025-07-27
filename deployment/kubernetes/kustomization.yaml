@@ -1,0 +1,169 @@
+# Kustomization for HankookTire SmartSensor 2.0 Kubernetes Deployment
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: hankook-smartsensor-2.0
+
+# 네임스페이스 설정
+namespace: hankook-smartsensor
+
+# 공통 레이블 추가
+commonLabels:
+  app.kubernetes.io/name: hankook-smartsensor
+  app.kubernetes.io/version: "2.0.0"
+  app.kubernetes.io/managed-by: kustomize
+  environment: production
+  team: iot-platform
+
+# 공통 애노테이션 추가
+commonAnnotations:
+  deployment.kubernetes.io/revision: "1"
+  kubernetes.io/change-cause: "Initial deployment of HankookTire SmartSensor 2.0"
+
+# 리소스 파일들
+resources:
+  # 기본 설정
+  - namespace.yaml
+  
+  # 보안 설정 (Secrets는 별도 관리 권장)
+  # - secrets.yaml
+  
+  # 데이터베이스
+  - database-deployment.yaml
+  
+  # 캐시 & 메시징
+  - redis-deployment.yaml
+  - mqtt-deployment.yaml
+  
+  # 애플리케이션 서비스
+  - api-deployment.yaml
+  
+  # 웹 인터페이스 & 라우팅
+  - ingress-nginx.yaml
+  
+  # 모니터링 스택
+  - monitoring-stack.yaml
+
+# 리소스 이름에 접두사 추가
+namePrefix: hankook-
+
+# 이미지 설정
+images:
+  - name: hankook/smartsensor-api
+    newTag: "2.0.0"
+  - name: hankook/smartsensor-frontend
+    newTag: "2.0.0"
+
+# ConfigMap 생성기
+configMapGenerator:
+  - name: app-config
+    literals:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - API_VERSION=2.0.0
+      - ENABLE_METRICS=true
+      - ENABLE_TRACING=true
+    options:
+      disableNameSuffixHash: true
+
+  - name: database-init-config
+    files:
+      - init.sql=../../database/init.sql
+    options:
+      disableNameSuffixHash: true
+
+# Secret 생성기 (개발용 - 운영환경에서는 별도 관리)
+secretGenerator:
+  - name: temp-secrets
+    literals:
+      - DATABASE_PASSWORD=changeme
+      - REDIS_PASSWORD=changeme
+      - JWT_SECRET=changeme
+    type: Opaque
+    options:
+      disableNameSuffixHash: true
+
+# 패치 적용
+patches:
+  # 운영환경 리소스 제한 증가
+  - target:
+      kind: Deployment
+      name: hankook-api
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "500m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "1Gi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "2000m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "4Gi"
+
+  # PostgreSQL 운영환경 설정
+  - target:
+      kind: StatefulSet
+      name: postgres
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "2Gi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "8Gi"
+
+  # 보안 컨텍스트 강화
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/securityContext
+        value:
+          runAsNonRoot: true
+          fsGroup: 1000
+          seccompProfile:
+            type: RuntimeDefault
+
+# 리플리카 설정 (환경별)
+replicas:
+  - name: hankook-api
+    count: 3
+  - name: frontend
+    count: 2
+  - name: postgres
+    count: 3
+
+# 변수 교체
+replacements:
+  - source:
+      kind: ConfigMap
+      name: app-config
+      fieldPath: data.API_VERSION
+    targets:
+      - select:
+          kind: Deployment
+          name: hankook-api
+        fieldPaths:
+          - spec.template.metadata.labels.version
+
+# Helm과 유사한 values 설정
+vars:
+  - name: NAMESPACE
+    objref:
+      kind: Namespace
+      name: hankook-smartsensor
+      apiVersion: v1
+    fieldref:
+      fieldpath: metadata.name
+
+  - name: API_SERVICE_NAME
+    objref:
+      kind: Service
+      name: api-service
+      apiVersion: v1
+    fieldref:
+      fieldpath: metadata.name
